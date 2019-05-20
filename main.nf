@@ -84,6 +84,7 @@ params.name = false
 params.email = false
 params.plaintext_email = false
 
+params.mzmldef = false
 params.isobaric = false
 params.instrument = 'qe' // Default instrument is Q-Exactive
 params.activation = 'hcd' // Only for isobaric quantification
@@ -167,7 +168,6 @@ process get_software_versions {
     file "software_versions.csv"
 
     script:
-    // TODO nf-core: Get all tools to print their version number here
     """
     echo $workflow.manifest.version > v_pipeline.txt
     echo $workflow.nextflow.version > v_nextflow.txt
@@ -190,7 +190,7 @@ if (params.mzmldef) {
 } else {
   Channel
     .fromPath(params.mzmls)
-    .map { it -> [it.baseName.replaceFirst(/.*\/(\S+)\.mzML/, "\$1"), it] }
+    .map { it -> ["${it.baseName.replaceFirst(/.*\/(\S+)\.mzML/, "\$1")}", it] }
     .set { mzml_in }
 }
 
@@ -199,7 +199,7 @@ mzml_in
   .tap { mzml_msgf; mzml_quant; sets }
   .toList()
   .map { it.sort( {a, b -> a[0] <=> b[0]}) } // sort on sample for consistent .sh script in -resume
-  .map { it -> [it.collect() { it[0] }, it.collect() { it[1] } ] } // lists: [sets], [mzmlfiles], [plates]
+  .map { it -> [it.collect() { it[0] }, it.collect() { it[1] } ] } // lists: [sets], [mzmlfiles]
   .set{ mzmlfiles_all }
 
 // Set names are first item in input lists, collect them for PSM tables and QC purposes
@@ -216,10 +216,10 @@ process quantifySpectra {
 
   // sample is setname in labelchecks!
   input:
-  set val(sample), file(infile) from mzml_quant
+  set val(setname), file(infile) from mzml_quant
 
   output:
-  set val(sample), file("${infile}.consensusXML") into isobaricxml
+  set val(setname), file("${infile}.consensusXML") into isobaricxml
 
   script:
   activationtype = [hcd:'High-energy collision-induced dissociation', cid:'Collision-induced dissociation', etd:'Electron transfer dissociation'][params.activation]
@@ -250,15 +250,15 @@ process createSpectraLookup {
 isobaricxml
   .toList()
   .map { it.sort({a, b -> a[0] <=> b[0]}) }
-  .map { it -> [it.collect() { it[0] }, it.collect() { it[1] }] } // samples, isoxml
-  .set { isofiles_sets }
+  .map { it -> it.collect() { it[1] } }
+  .set { isofiles_sorted }
 
 
 process quantLookup {
 
   input:
   file lookup from speclookup
-  set val(isosamples), file(isofns) from isofiles_sets
+  file(isofns) from isofiles_sorted
 
   output:
   file 'db.sqlite' into quantlookup
@@ -267,8 +267,8 @@ process quantLookup {
   """
   # SQLite lookup needs copying to not modify the input file which would mess up a rerun with -resume
   cat $lookup > db.sqlite
-  msslookup isoquant --dbfile db.sqlite -i ${isofns.join(' ')} --spectra ${isosamples.collect{ x -> x + '.mzML' }.join(' ')}
-  """
+  msslookup isoquant --dbfile db.sqlite -i ${isofns.join(' ')} --spectra ${isofns.collect{ x -> x.baseName.replaceFirst(/\.consensusXML/, "")}.join(' ')}
+    """
 }
 
 
@@ -290,7 +290,7 @@ process createTargetDecoyFasta {
 
 
 process msgfPlus {
-  cpus = config.poolSize < 4 ? config.poolSize : 4
+  cpus = config.poolSize < 2 ? config.poolSize : 2
 
   input:
   set val(setname), file(x) from mzml_msgf
@@ -298,10 +298,11 @@ process msgfPlus {
   file mods
 
   output:
-  set val(setname), file("${setname}.mzid") into mzids
+  set val(setname), val(sample), file("${setname}.mzid") into mzids
   set val(setname), file("${setname}.mzid"), file('out.mzid.tsv') into mzidtsvs
   
   script:
+  sample = x.baseName.replaceFirst(/\.mzML/, "")
   // FIXME which protocol, ask someone
   msgfprotocol = 0 //[tmt:4, itraq:2, false:0][plextype]
   msgfinstrument = [velos:1, qe:3, false:0][params.instrument]
@@ -312,9 +313,8 @@ process msgfPlus {
   """
 }
 
-// in case we have multiple files per set in the future (you never know), we group
+// in case we have multiple files per set in the future (you never know), we group by set
 mzids
-  .map { it -> [it[0], it[0], it[1]] } // setname is sample, so double it so we have all samples
   .groupTuple()
   .set { mzids_2pin }
 
@@ -328,7 +328,6 @@ process percolator {
   set val(setname), file('perco.xml') into percolated
 
   """
-  echo $samples
   mkdir mzids
   count=1;for sam in ${samples.join(' ')}; do ln -s `pwd`/mzid\$count mzids/\${sam}.mzid; echo mzids/\${sam}.mzid >> metafile; ((count++));done
   msgf2pin -o percoin.xml -e trypsin -P "decoy_" metafile
@@ -444,7 +443,7 @@ peptides_out
 process reportLabelCheck {
 
   cache false
-  publishDir "${params.outdir}", mode: 'copy' saveAs: "qc.html"
+  publishDir "${params.outdir}", mode: 'copy'
 
   input:
   file('peps*') from peptide_tables
@@ -452,7 +451,7 @@ process reportLabelCheck {
   file(psms) from psm_result
 
   output:
-  file('labelcheck.html') into results
+  file('qc.html') into results
 
   script:
   """
@@ -463,13 +462,16 @@ import json
 from jinja2 import Template
   
 setnames = ["${setnames.join('", "')}"]
+sorted_setnames = ${params.mzmldef ? "sorted(setnames, key=lambda x: (x.split('_')[1:], x.split('_')[0].replace('N', 'A')))" : "setnames"} # sort on N/C if channels
+sorted_setnames_order = [setnames.index(x) for x in sorted_setnames]
 labeldata = [{'feat': 'psm', 'label': 'labeled', 'data': $ok_psms}, {'feat': 'pep', 'label': 'labeled', 'data': $ok_pep}, {'feat': 'psm', 'label': 'non-labeled', 'data': $fail_psms}, {'feat': 'pep', 'label': 'non-labeled', 'data': $fail_pep}]
+for ld in labeldata:
+    ld['data'] = [ld['data'][ix] for ix in sorted_setnames_order]
 
 tmtmeans = {}
 meanfns = sorted(glob('means*'), key=lambda x: int(x[x.index('ns')+2:]))
-for sn, mfn in zip(setnames, meanfns):
-    print(sn, mfn)
-    with open(mfn) as fp:
+for ix in sorted_setnames_order:
+    with open(meanfns[ix]) as fp:
         for ch,val in json.load(fp).items():
             try:
                 tmtmeans[ch].append(val)
@@ -478,8 +480,8 @@ for sn, mfn in zip(setnames, meanfns):
     
 with open("${baseDir}/assets/report.html") as fp: 
     main = Template(fp.read())
-with open('labelcheck.html', 'w') as fp:
-    fp.write(main.render(setnames=setnames, labeldata=labeldata, tmtmeans=tmtmeans))
+with open('qc.html', 'w') as fp:
+    fp.write(main.render(setnames=sorted_setnames, labeldata=labeldata, tmtmeans=tmtmeans))
 """
 }
 
