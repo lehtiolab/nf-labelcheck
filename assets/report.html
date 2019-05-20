@@ -1,0 +1,29 @@
+<html lang="en">
+<head>
+  <meta http-equiv="Content-Security-Policy" content="script-src 'unsafe-inline' https://cdnjs.cloudflare.com;">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/2.8.0/Chart.bundle.js"></script>
+  <title>Lehtio labelcheck report</title>
+  <link rel="stylesheet" type="text/css" href="https://cdnjs.cloudflare.com/ajax/libs/bulma/0.6.2/css/bulma.min.css">
+</head>
+<body>
+  <div class="container">
+    <h3 class="title is-3">Labelcheck report</h3>
+    <div class="columns">
+      <div class="column">
+    	<h5 class="title is-5">PSMs</h5>
+          <canvas id="psms_labeled" ></canvas>
+      </div>
+      <div class="column">
+    	<h5 class="title is-5">Peptides</h5>
+          <canvas id="peptides_labeled" ></canvas>
+      </div>
+    </div>
+  </div>
+</body>
+<script>
+var psmctx = document.getElementById('psms_labeled').getContext('2d');
+var psmchart = new Chart(psmctx, {{ psmchart }});
+var pepctx = document.getElementById('peptides_labeled').getContext('2d');
+var pepchart = new Chart(pepctx, {{ pepchart}});
+</script>
+</html>

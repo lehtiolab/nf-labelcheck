@@ -7,14 +7,14 @@ import re
 regexes = {
     'nf-core/labelcheck': ['v_pipeline.txt', r"(\S+)"],
     'Nextflow': ['v_nextflow.txt', r"(\S+)"],
-    'FastQC': ['v_fastqc.txt', r"FastQC v(\S+)"],
-    'MultiQC': ['v_multiqc.txt', r"multiqc, version (\S+)"],
+    'MSGF+': ['v_msgf.txt', r"([0-9\.]+)"],
+    'Percolator': ['v_perco.txt', r"([0-9\.]+)"],
+    'msstitch': ['v_mss.txt', r"(\S+)"],
+    'OpenMS': ['v_openms.txt', r"Version: ([0-9A-Z\-\.]+)"],
 }
 results = OrderedDict()
 results['nf-core/labelcheck'] = '<span style="color:#999999;\">N/A</span>'
 results['Nextflow'] = '<span style="color:#999999;\">N/A</span>'
-results['FastQC'] = '<span style="color:#999999;\">N/A</span>'
-results['MultiQC'] = '<span style="color:#999999;\">N/A</span>'
 
 # Search each file using its regex
 for k, v in regexes.items():

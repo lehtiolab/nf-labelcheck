@@ -19,19 +19,19 @@ def helpMessage() {
 
     The typical command for running the pipeline is as follows:
 
-    nextflow run nf-core/labelcheck --reads '*_R{1,2}.fastq.gz' -profile docker
+    nextflow run nf-core/labelcheck --mzmls '*.mzML' --tdb swissprot.fa --mods assets/tmtmods.txt -profile docker
 
     Mandatory arguments:
-      --reads                       Path to input data (must be surrounded with quotes)
+      --mzmls                       Path to mzML files
+      --tdb                         Path to target FASTA protein database
+      --isobaric VALUE              In case of isobaric, specify: tmt10plex, tmt6plex, itraq8plex, itraq4plex
+      --mods                        Path to MSGF+ modification file (two examples in assets folder)
       -profile                      Configuration profile to use. Can use multiple (comma separated)
                                     Available: conda, docker, singularity, awsbatch, test and more.
 
     Options:
-      --genome                      Name of iGenomes reference
-      --singleEnd                   Specifies that the input is single end reads
-
-    References                      If not specified in the configuration file or you wish to overwrite any of the references.
-      --fasta                       Path to Fasta reference
+      --activation VALUE            Specify activation protocol: hcd (DEFAULT), cid, etd for isobaric 
+                                    quantification. Not necessary for other functionality.
 
     Other options:
       --outdir                      The output directory where the results will be saved
@@ -56,23 +56,8 @@ if (params.help){
 }
 
 // Check if genome exists in the config file
-if (params.genomes && params.genome && !params.genomes.containsKey(params.genome)) {
-    exit 1, "The provided genome '${params.genome}' is not available in the iGenomes file. Currently the available genomes are ${params.genomes.keySet().join(", ")}"
-}
 
 // TODO nf-core: Add any reference files that are needed
-// Configurable reference genomes
-fasta = params.genome ? params.genomes[ params.genome ].fasta ?: false : false
-if ( params.fasta ){
-    fasta = file(params.fasta)
-    if( !fasta.exists() ) exit 1, "Fasta file not found: ${params.fasta}"
-}
-//
-// NOTE - THIS IS NOT USED IN THIS PIPELINE, EXAMPLE ONLY
-// If you want to use the above in a process, define the following:
-//   input:
-//   file fasta from fasta
-//
 
 
 // Has the run name been specified by the user?
@@ -97,29 +82,28 @@ if( workflow.profile == 'awsbatch') {
 ch_multiqc_config = Channel.fromPath(params.multiqc_config)
 ch_output_docs = Channel.fromPath("$baseDir/docs/output.md")
 
-/*
- * Create a channel for input read files
- */
-if(params.readPaths){
-    if(params.singleEnd){
-        Channel
-            .from(params.readPaths)
-            .map { row -> [ row[0], [file(row[1][0])]] }
-            .ifEmpty { exit 1, "params.readPaths was empty - no input files supplied" }
-            .into { read_files_fastqc; read_files_trimming }
-    } else {
-        Channel
-            .from(params.readPaths)
-            .map { row -> [ row[0], [file(row[1][0]), file(row[1][1])]] }
-            .ifEmpty { exit 1, "params.readPaths was empty - no input files supplied" }
-            .into { read_files_fastqc; read_files_trimming }
-    }
-} else {
-    Channel
-        .fromFilePairs( params.reads, size: params.singleEnd ? 1 : 2 )
-        .ifEmpty { exit 1, "Cannot find any reads matching: ${params.reads}\nNB: Path needs to be enclosed in quotes!\nIf this is single-end data, please specify --singleEnd on the command line." }
-        .into { read_files_fastqc; read_files_trimming }
-}
+
+params.name = false
+params.email = false
+params.plaintext_email = false
+
+params.isobaric = false
+params.instrument = 'qe' // Default instrument is Q-Exactive
+params.activation = 'hcd' // Only for isobaric quantification
+params.outdir = 'results'
+
+
+// Validate and set file inputs
+plextype = params.isobaric ? params.isobaric.replaceFirst(/[0-9]+plex/, "") : 'false'
+mods = file(params.mods)
+if( !mods.exists() ) exit 1, "Modification file not found: ${params.mods}"
+tdb = file(params.tdb)
+if( !tdb.exists() ) exit 1, "Target fasta DB file not found: ${params.tdb}"
+
+output_docs = file("$baseDir/docs/output.md")
+
+// set constant variables
+accolmap = [peptides: 12]
 
 
 // Header log info
@@ -128,9 +112,6 @@ def summary = [:]
 if(workflow.revision) summary['Pipeline Release'] = workflow.revision
 summary['Run Name']         = custom_runName ?: workflow.runName
 // TODO nf-core: Report custom parameters here
-summary['Reads']            = params.reads
-summary['Fasta Ref']        = params.fasta
-summary['Data Type']        = params.singleEnd ? 'Single-End' : 'Paired-End'
 summary['Max Resources']    = "$params.max_memory memory, $params.max_cpus cpus, $params.max_time time per job"
 if(workflow.containerEngine) summary['Container'] = "$workflow.containerEngine - $workflow.container"
 summary['Output dir']       = params.outdir
@@ -193,63 +174,304 @@ process get_software_versions {
     """
     echo $workflow.manifest.version > v_pipeline.txt
     echo $workflow.nextflow.version > v_nextflow.txt
-    fastqc --version > v_fastqc.txt
-    multiqc --version > v_multiqc.txt
+    msgf_plus | head -n1 > v_msgf.txt
+    percolator -h |& head -n1 > v_perco.txt || true
+    msspsmtable --version > v_mss.txt
+    source activate openms-2.4.0
+    IsobaricAnalyzer |& grep Version > v_openms.txt || true
     scrape_software_versions.py &> software_versions_mqc.yaml
     """
 }
 
 
+Channel
+  .fromPath(params.mzmls)
+  .map { it -> file(it) }
+  .map { it -> [it.baseName.replaceFirst(/.*\/(\S+)\.mzML/, "\$1"), it] }
+  .tap { mzml_msgf; mzml_quant; sets }
+  .toList()
+  .map { it.sort( {a, b -> a[0] <=> b[0]}) } // sort on sample for consistent .sh script in -resume
+  .map { it -> [it.collect() { it[0] }, it.collect() { it[1] } ] } // lists: [sets], [mzmlfiles], [plates]
+  .set{ mzmlfiles_all }
 
-/*
- * STEP 1 - FastQC
- */
-process fastqc {
-    tag "$name"
-    publishDir "${params.outdir}/fastqc", mode: 'copy',
-        saveAs: {filename -> filename.indexOf(".zip") > 0 ? "zips/$filename" : "$filename"}
+// Set names are first item in input lists, collect them for PSM tables and QC purposes
+sets
+  .map{ it -> it[0] }
+  .unique()
+  .tap { setnames_psm } 
+  .collect()
+  .map { it -> [it] }
+  .into { setnames_featqc; setnames_psmqc }
 
-    input:
-    set val(name), file(reads) from read_files_fastqc
 
-    output:
-    file "*_fastqc.{zip,html}" into fastqc_results
+process quantifySpectra {
 
-    script:
-    """
-    fastqc -q $reads
-    """
+  // sample is setname in labelchecks!
+  input:
+  set val(sample), file(infile) from mzml_quant
+
+  output:
+  set val(sample), file("${infile}.consensusXML") into isobaricxml
+
+  script:
+  activationtype = [hcd:'High-energy collision-induced dissociation', cid:'Collision-induced dissociation', etd:'Electron transfer dissociation'][params.activation]
+  massshift = [tmt:0.0013, itraq:0.00125, false:0][plextype]
+  """
+  source activate openms-2.4.0
+  IsobaricAnalyzer  -type $params.isobaric -in $infile -out \"${infile}.consensusXML\" -extraction:select_activation \"$activationtype\" -extraction:reporter_mass_shift $massshift -extraction:min_precursor_intensity 1.0 -extraction:keep_unannotated_precursor true -quantification:isotope_correction true
+  """
 }
 
 
+process createSpectraLookup {
 
-/*
- * STEP 2 - MultiQC
- */
-process multiqc {
-    publishDir "${params.outdir}/MultiQC", mode: 'copy'
+  input:
+  set val(setnames), file(mzmlfiles) from mzmlfiles_all
 
-    input:
-    file multiqc_config from ch_multiqc_config
-    // TODO nf-core: Add in log files from your new processes for MultiQC to find!
-    file ('fastqc/*') from fastqc_results.collect().ifEmpty([])
-    file ('software_versions/*') from software_versions_yaml.collect()
-    file workflow_summary from create_workflow_summary(summary)
+  output:
+  file 'mslookup_db.sqlite' into speclookup 
 
-    output:
-    file "*multiqc_report.html" into multiqc_report
-    file "*_data"
-    file "multiqc_plots"
-
-    script:
-    rtitle = custom_runName ? "--title \"$custom_runName\"" : ''
-    rfilename = custom_runName ? "--filename " + custom_runName.replaceAll('\\W','_').replaceAll('_+','_') + "_multiqc_report" : ''
-    // TODO nf-core: Specify which MultiQC modules to use with -m for a faster run time
-    """
-    multiqc -f $rtitle $rfilename --config $multiqc_config .
-    """
+  script:
+  """
+  msslookup spectra -i ${mzmlfiles.join(' ')} --setnames ${setnames.join(' ')}
+  """
 }
 
+
+// Collect all isobaric quant XML output for quant lookup building process
+isobaricxml
+  .toList()
+  .map { it.sort({a, b -> a[0] <=> b[0]}) }
+  .map { it -> [it.collect() { it[0] }, it.collect() { it[1] }] } // samples, isoxml
+  .set { isofiles_sets }
+
+
+process quantLookup {
+
+  input:
+  file lookup from speclookup
+  set val(isosamples), file(isofns) from isofiles_sets
+
+  output:
+  file 'db.sqlite' into quantlookup
+
+  script:
+  """
+  # SQLite lookup needs copying to not modify the input file which would mess up a rerun with -resume
+  cat $lookup > db.sqlite
+  msslookup isoquant --dbfile db.sqlite -i ${isofns.join(' ')} --spectra ${isosamples.collect{ x -> x + '.mzML' }.join(' ')}
+  """
+}
+
+
+process createTargetDecoyFasta {
+ 
+  input:
+  file(tdb)
+
+  output:
+  file('db.fa') into concatdb
+  set file(tdb), file("decoy_${tdb}") into searchdbs 
+
+  script:
+  """
+  tryprev.py $tdb
+  cat $tdb decoy_${tdb} > db.fa
+  """
+}
+
+
+process msgfPlus {
+  cpus = config.poolSize < 4 ? config.poolSize : 4
+
+  input:
+  set val(setname), file(x) from mzml_msgf
+  file(db) from concatdb
+  file mods
+
+  output:
+  set val(setname), file("${setname}.mzid") into mzids
+  set val(setname), file("${setname}.mzid"), file('out.mzid.tsv') into mzidtsvs
+  
+  script:
+  // FIXME which protocol, ask someone
+  msgfprotocol = 0 //[tmt:4, itraq:2, false:0][plextype]
+  msgfinstrument = [velos:1, qe:3, false:0][params.instrument]
+  """
+  msgf_plus -Xmx8G -d $db -s $x -o "${setname}.mzid" -thread 2 -mod $mods -tda 0 -t 10.0ppm -ti -1,2 -m 0 -inst ${msgfinstrument} -e 1 -protocol ${msgfprotocol} -ntt 2 -minLength 7 -maxLength 50 -minCharge 2 -maxCharge 6 -n 1 -addFeatures 1
+  msgf_plus -Xmx3500M edu.ucsd.msjava.ui.MzIDToTsv -i "${setname}.mzid" -o out.mzid.tsv
+  rm ${db.baseName.replaceFirst(/\.fasta/, "")}.c*
+  """
+}
+
+// in case we have multiple files per set in the future (you never know), we group
+mzids
+  .map { it -> [it[0], it[0], it[1]] } // setname is sample, so double it so we have all samples
+  .groupTuple()
+  .set { mzids_2pin }
+
+
+process percolator {
+
+  input:
+  set val(setname), val(samples), file('mzid?') from mzids_2pin
+
+  output:
+  set val(setname), file('perco.xml') into percolated
+
+  """
+  echo $samples
+  mkdir mzids
+  count=1;for sam in ${samples.join(' ')}; do ln -s `pwd`/mzid\$count mzids/\${sam}.mzid; echo mzids/\${sam}.mzid >> metafile; ((count++));done
+  msgf2pin -o percoin.xml -e trypsin -P "decoy_" metafile
+  percolator -j percoin.xml -X perco.xml -N 500000 --decoy-xml-output -y
+  """
+}
+
+
+mzidtsvs
+  .groupTuple()
+  .join(percolated)
+  .set { mzperco }
+
+
+process svmToTSV {
+
+  input:
+  set val(setname), file('mzident????'), file('mzidtsv????'), file(perco) from mzperco 
+
+  output:
+  set val(setname), file('tmzidperco') into tmzidtsv_perco
+
+  script:
+  """
+  perco_to_tsv.py -p $perco 
+  """
+}
+
+// Collect percolator data of target and feed into PSM table creation
+tmzidtsv_perco
+  .toList()
+  .map { it.sort( {a, b -> a[0] <=> b[0]}) } // sort on setname for resumable PSM table
+  .map { it -> [it.collect() { it[0]}, it.collect() { it[1] }] }
+  .combine(quantlookup)
+  .set { prepsm }
+
+
+
+/*
+* Step 3: Post-process peptide identification data
+*/
+process createPSMTable {
+
+  input:
+  set val(setnames), file('psms?'), file('lookup') from prepsm
+  file(tdb)
+
+  output:
+  file("${outpsms}") into psm_result
+  set val({setnames.collect() { it }}), file({setnames.collect() { it + '.tsv' }}) into setpsmtables
+  
+
+  script:
+  psmlookup = "psmlookup.sql"
+  outpsms = "psmtable.txt"
+  """
+  msspsmtable merge -i psms* -o psms.txt
+  msspsmtable conffilt -i psms.txt -o filtpsm --confidence-better lower --confidence-lvl 0.01 --confcolpattern 'PSM q-value'
+  msspsmtable conffilt -i filtpsm -o filtpep --confidence-better lower --confidence-lvl 0.01 --confcolpattern 'peptide q-value'
+  # SQLite lookup needs copying to not modify the input file which would mess up a rerun with -resume
+  cat lookup > $psmlookup
+  msslookup psms -i filtpep --dbfile $psmlookup 
+  msspsmtable specdata -i filtpep --dbfile $psmlookup -o prepsms.txt
+  msspsmtable quant -i prepsms.txt -o "${outpsms}" --dbfile $psmlookup --isobaric
+  sed 's/\\#SpecFile/SpectraFile/' -i "${outpsms}"
+  msspsmtable split -i "${outpsms}" --bioset
+  """
+}
+
+setpsmtables
+  .map { it -> [it[0], it[1]] }
+  .transpose()
+  .set { psm_pep }
+
+process psm2Peptides {
+
+  input:
+  set val(setname), file(psms) from psm_pep
+  
+  output:
+  file("${setname}") into peptides_out
+  stdout into psm_stats
+
+  script:
+  col = accolmap.peptides + 1  // psm2pep adds a column
+  """
+  # Create peptide table from PSM table, picking best scoring unique peptides
+  msspeptable psm2pep -i $psms -o peptides --scorecolpattern svm --spectracol 1 --isobquantcolpattern plex 
+  # Move peptide sequence to first column
+  paste <( cut -f ${col} peptides) <( cut -f 1-${col-1},${col+1}-500 peptides) > "${setname}"
+
+# FIXME 229 is TMT, also get theother ones, from the mod file!
+  echo -n "$setname" \$(calc_psmstats.py $psms 'Peptide' '+229.163') \$(calc_psmstats.py "$setname" 'Peptide sequence' '+229.163') | tr ' ' '\t'
+  #wc -l $psms| cut -f1 -d ' ' # > "${setname}"_amountpsms
+  #grep -cv 229\\.163 "${setname}".tsv # > "${setname}"_amount_nolabel
+  """
+}
+
+
+psm_stats
+.view()
+  .map { it -> it.tokenize('\t') }
+.view()
+  .toList()
+  .map { it.sort( {a, b -> a[0] <=> b[0]}) } // sort on sample for consistent .sh script in -resume
+  .transpose()
+  .toList()
+  .set { psm_values }
+
+peptides_out
+  .toList()
+  .set { peptide_tables }
+
+
+process reportLabelCheck {
+
+  publishDir "${params.outdir}", mode: 'copy'
+
+  input:
+  file('peps*') from peptide_tables
+  set val(setnames), val(ok_psms), val(psm_nolab_amount), val(ok_pep), val(fail_pep) from psm_values
+  file(psms) from psm_result
+
+  output:
+  file('labelcheck.html') into results
+  script:
+  """
+#!/usr/bin/env python 
+  
+from jinja2 import Template
+  
+setnames = ["${setnames.join('", "')}"]
+fail_psms = $psm_nolab_amount
+ok_psms = $ok_psms
+ok_pep = $ok_pep
+fail_pep = $fail_pep
+
+with open("${baseDir}/assets/barchart.js") as fp: 
+    chart = Template(fp.read())
+psmch = chart.render(setnames=setnames, bottomstack=ok_psms, topstack=fail_psms)
+pepch = chart.render(setnames=setnames, bottomstack=ok_pep, topstack=fail_pep)
+#pepch = chart.render(setnames=setnames, bottomstack=ok_psms, topstack=fail_psms)
+with open("${baseDir}/assets/report.html") as fp: 
+    main = Template(fp.read())
+with open('labelcheck.html', 'w') as fp:
+    fp.write(main.render(setnames=setnames, psmchart=psmch, pepchart=pepch))
+  # percent of labeled peptides, psms
+  # average of psm tmt intensity
+  # collect in html
+  """
+}
 
 
 /*
