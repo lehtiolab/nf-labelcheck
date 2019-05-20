@@ -1,7 +1,8 @@
 <html lang="en">
 <head>
-  <meta http-equiv="Content-Security-Policy" content="script-src 'unsafe-inline' https://cdnjs.cloudflare.com;">
+  <meta http-equiv="Content-Security-Policy" content="script-src 'unsafe-inline' https://cdnjs.cloudflare.com https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@0.6;">
   <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/2.8.0/Chart.bundle.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@0.6"></script>
   <title>Lehtio labelcheck report</title>
   <link rel="stylesheet" type="text/css" href="https://cdnjs.cloudflare.com/ajax/libs/bulma/0.6.2/css/bulma.min.css">
 </head>
@@ -10,20 +11,111 @@
     <h3 class="title is-3">Labelcheck report</h3>
     <div class="columns">
       <div class="column">
-    	<h5 class="title is-5">PSMs</h5>
+    	<h5 class="title is-5"># PSMs</h5>
           <canvas id="psms_labeled" ></canvas>
       </div>
       <div class="column">
-    	<h5 class="title is-5">Peptides</h5>
+    	<h5 class="title is-5"># Peptides</h5>
           <canvas id="peptides_labeled" ></canvas>
       </div>
     </div>
+    	<h5 class="title is-5">Mean channel intensities</h5>
+          <canvas id="tmtmeans" ></canvas>
   </div>
 </body>
 <script>
+function dset(label, data, bgcol, bordercol) {
+  return {label: label, data: data,
+          backgroundColor: bgcol,
+          borderColor: bordercol, borderWidth: 1};
+}
+
+function horizBar(setnames, datasets, percent) {
+  plot = {
+    type: 'horizontalBar',
+    data: {
+        labels: setnames,
+        datasets: datasets,
+    },
+    options: {
+        scales: {
+            xAxes: [{
+                stacked: true,
+            }],
+            yAxes: [{
+                stacked: true,
+                ticks: {
+                    beginAtZero: true
+                }
+            }]
+        }
+    }
+  };
+  if (percent) {
+    plot['plugins'] = [ChartDataLabels];
+    plot['options']['plugins'] = {
+      'datalabels': {formatter: function(val, context) {
+        var dsets = context.chart.data.datasets;
+        var ix = context.dataIndex;
+        if (context.datasetIndex === 0) {
+          return Math.round(dsets[0].data[ix] / (dsets[0].data[ix] + dsets[1].data[ix]) * 100) + '%';
+        } else { return '';}
+      }
+      }
+    }
+  }
+  return plot;
+}
+
+
+
+
+function cyclecol(gamma) {
+  return [`rgba(255, 99, 132, ${gamma})`, // red
+    `rgba(54, 162, 235, ${gamma})`, // blue
+    `rgba(255, 178, 102, ${gamma})`, // orange
+    `rgba(204, 153, 255, ${gamma})`, // purple
+    `rgba(204, 204, 0, ${gamma})`, // yellow
+    `rgba(255, 204, 255, ${gamma})`,
+    `rgba(102, 204, 0, ${gamma})`, // green
+    `rgba(255, 102, 255, ${gamma})`, // magenta
+    `rgba(192, 192, 192, ${gamma})`, // grey
+    `rgba(51, 255, 255, ${gamma})`, // lightblue
+    `rgba(153, 0, 76, ${gamma})`, // dark magenta
+    `rgba(204, 102, 0, ${gamma})`, // orangebrown
+  ];
+}
+
+
+function cols(label, gamma) {
+  return {'labeled': cyclecol(gamma)[0],
+    'non-labeled': cyclecol(gamma)[1],}[label]
+}
+
+Chart.plugins.unregister(ChartDataLabels);
+
+var psmdatg = [];
+labeleddata = {{ labeldata }};
+tmtdata = {{ tmtmeans }};
+labdsets = {'psm': [], 'pep': []};
+
+for (ds of labeleddata) {
+  labdsets[ds['feat']].push(dset(ds['label'], ds['data'], cols(ds['label'], 0.2), cols(ds['label'], 1)));
+}
+
+meddsets = [];
+bgcols = cyclecol(0.2);
+bordercols = cyclecol(1);
+for (tmt of Object.entries(tmtdata).map(function(x, ix) {return [x, bgcols[ix], bordercols[ix]] })) {
+  meddsets.push(dset(tmt[0][0], tmt[0][1], tmt[1], tmt[2]));
+}
+
+  
 var psmctx = document.getElementById('psms_labeled').getContext('2d');
-var psmchart = new Chart(psmctx, {{ psmchart }});
+var psmchart = new Chart(psmctx, horizBar({{ setnames }}, labdsets['psm'], true));
 var pepctx = document.getElementById('peptides_labeled').getContext('2d');
-var pepchart = new Chart(pepctx, {{ pepchart}});
+var pepchart = new Chart(pepctx, horizBar({{ setnames }}, labdsets['pep'], true));
+var tmtctx = document.getElementById('tmtmeans').getContext('2d');
+var pepchart = new Chart(tmtctx, horizBar({{ setnames }}, meddsets));
 </script>
 </html>

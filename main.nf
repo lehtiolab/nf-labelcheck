@@ -11,7 +11,6 @@
 
 
 def helpMessage() {
-    // TODO nf-core: Add to this help message with new command line parameters
     log.info nfcoreHeader()
     log.info"""
 
@@ -23,6 +22,8 @@ def helpMessage() {
 
     Mandatory arguments:
       --mzmls                       Path to mzML files
+      --mzmldef                     Alternative to --mzml: path to file containing list of mzMLs 
+                                    tab separated: file-tab-channel path
       --tdb                         Path to target FASTA protein database
       --isobaric VALUE              In case of isobaric, specify: tmt10plex, tmt6plex, itraq8plex, itraq4plex
       --mods                        Path to MSGF+ modification file (two examples in assets folder)
@@ -54,10 +55,6 @@ if (params.help){
     helpMessage()
     exit 0
 }
-
-// Check if genome exists in the config file
-
-// TODO nf-core: Add any reference files that are needed
 
 
 // Has the run name been specified by the user?
@@ -183,11 +180,22 @@ process get_software_versions {
     """
 }
 
+if (params.mzmldef) {
+  Channel
+    .from(file("${params.mzmldef}").readLines())
+    .map { it -> it.tokenize('\t') }
+    .map { it -> [it[1], file(it[0])] }
+    .map { it -> ["${it[0]}_${it[1].baseName.replaceFirst(/.*\/(\S+)\.mzML/, "\$1")}", it[1]] }
+    .set { mzml_in }
+} else {
+  Channel
+    .fromPath(params.mzmls)
+    .map { it -> [it.baseName.replaceFirst(/.*\/(\S+)\.mzML/, "\$1"), it] }
+    .set { mzml_in }
+}
 
-Channel
-  .fromPath(params.mzmls)
-  .map { it -> file(it) }
-  .map { it -> [it.baseName.replaceFirst(/.*\/(\S+)\.mzML/, "\$1"), it] }
+
+mzml_in
   .tap { mzml_msgf; mzml_quant; sets }
   .toList()
   .map { it.sort( {a, b -> a[0] <=> b[0]}) } // sort on sample for consistent .sh script in -resume
@@ -403,6 +411,7 @@ process psm2Peptides {
   output:
   file("${setname}") into peptides_out
   stdout into psm_stats
+  set val("$setname"), file("means") into psmmeans
 
   script:
   col = accolmap.peptides + 1  // psm2pep adds a column
@@ -414,16 +423,13 @@ process psm2Peptides {
 
 # FIXME 229 is TMT, also get theother ones, from the mod file!
   echo -n "$setname" \$(calc_psmstats.py $psms 'Peptide' '+229.163') \$(calc_psmstats.py "$setname" 'Peptide sequence' '+229.163') | tr ' ' '\t'
-  #wc -l $psms| cut -f1 -d ' ' # > "${setname}"_amountpsms
-  #grep -cv 229\\.163 "${setname}".tsv # > "${setname}"_amount_nolabel
   """
 }
 
 
 psm_stats
-.view()
   .map { it -> it.tokenize('\t') }
-.view()
+  .join(psmmeans)
   .toList()
   .map { it.sort( {a, b -> a[0] <=> b[0]}) } // sort on sample for consistent .sh script in -resume
   .transpose()
@@ -437,40 +443,44 @@ peptides_out
 
 process reportLabelCheck {
 
-  publishDir "${params.outdir}", mode: 'copy'
+  cache false
+  publishDir "${params.outdir}", mode: 'copy' saveAs: "qc.html"
 
   input:
   file('peps*') from peptide_tables
-  set val(setnames), val(ok_psms), val(psm_nolab_amount), val(ok_pep), val(fail_pep) from psm_values
+  set val(setnames), val(ok_psms), val(fail_psms), val(ok_pep), val(fail_pep), file('means*') from psm_values
   file(psms) from psm_result
 
   output:
   file('labelcheck.html') into results
+
   script:
   """
 #!/usr/bin/env python 
   
+from glob import glob
+import json
 from jinja2 import Template
   
 setnames = ["${setnames.join('", "')}"]
-fail_psms = $psm_nolab_amount
-ok_psms = $ok_psms
-ok_pep = $ok_pep
-fail_pep = $fail_pep
+labeldata = [{'feat': 'psm', 'label': 'labeled', 'data': $ok_psms}, {'feat': 'pep', 'label': 'labeled', 'data': $ok_pep}, {'feat': 'psm', 'label': 'non-labeled', 'data': $fail_psms}, {'feat': 'pep', 'label': 'non-labeled', 'data': $fail_pep}]
 
-with open("${baseDir}/assets/barchart.js") as fp: 
-    chart = Template(fp.read())
-psmch = chart.render(setnames=setnames, bottomstack=ok_psms, topstack=fail_psms)
-pepch = chart.render(setnames=setnames, bottomstack=ok_pep, topstack=fail_pep)
-#pepch = chart.render(setnames=setnames, bottomstack=ok_psms, topstack=fail_psms)
+tmtmeans = {}
+meanfns = sorted(glob('means*'), key=lambda x: int(x[x.index('ns')+2:]))
+for sn, mfn in zip(setnames, meanfns):
+    print(sn, mfn)
+    with open(mfn) as fp:
+        for ch,val in json.load(fp).items():
+            try:
+                tmtmeans[ch].append(val)
+            except KeyError:
+                tmtmeans[ch] = [val]
+    
 with open("${baseDir}/assets/report.html") as fp: 
     main = Template(fp.read())
 with open('labelcheck.html', 'w') as fp:
-    fp.write(main.render(setnames=setnames, psmchart=psmch, pepchart=pepch))
-  # percent of labeled peptides, psms
-  # average of psm tmt intensity
-  # collect in html
-  """
+    fp.write(main.render(setnames=setnames, labeldata=labeldata, tmtmeans=tmtmeans))
+"""
 }
 
 
