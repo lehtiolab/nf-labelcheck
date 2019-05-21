@@ -6,6 +6,8 @@ channels:
   - bioconda
   - defaults
 dependencies:
-  # TODO nf-core: Add required software dependencies here
-  - fastqc=0.11.8
-  - multiqc=1.7
+  - bioconda::msgf_plus=2017.07.21
+  - bioconda::msstitch=2.12
+  - conda-forge::biopython=1.72
+  - bioconda::percolator=3.1
+  - conda-forge::jinja2=2.10
