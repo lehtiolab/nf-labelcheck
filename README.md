@@ -24,7 +24,7 @@ The nf-core/labelcheck pipeline comes with documentation about the pipeline, fou
 4. [Output and how to interpret the results](docs/output.md)
 5. [Troubleshooting](https://nf-co.re/usage/troubleshooting)
 
-<!-- TODO nf-core: Add a brief overview of what the pipeline does and how it works -->
+The labelcheck pipeline takes multiple mzML files as input and performs identification and quantification to output an HTML report containing graphs to display the amount of incorporated isobaric label per sample on both peptide and PSM level. A PSM/peptide is considered to be not labeled if any of its K residues or its N-term have not been labeled. The report also shows the amount of labeling in the different channels per sample.
 
 ## Credits
 nf-core/labelcheck was originally written by Jorrit Boekel.
