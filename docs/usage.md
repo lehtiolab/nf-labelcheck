@@ -54,7 +54,7 @@ NXF_OPTS='-Xms1g -Xmx4g'
 The typical command for running the pipeline is as follows:
 
 ```bash
-nextflow run glormph/nf-core-labelcheck --mzmls '*.mzML' --tdb swissprot_20181011.fa --mods assets/tmtmods.txt --isobaric tmt10plex -profile standard,docker
+nextflow run glormph/nf-core-labelcheck --mzmls '*.mzML' --tdb swissprot_20181011.fa --mods assets/mods.txt --isobaric tmt10plex -profile standard,docker
 ```
 
 This will launch the pipeline with the `docker` configuration profile. See below for more information about profiles.

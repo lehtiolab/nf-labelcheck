@@ -18,7 +18,7 @@ def helpMessage() {
 
     The typical command for running the pipeline is as follows:
 
-    nextflow run nf-core/labelcheck --mzmls '*.mzML' --tdb swissprot.fa --mods assets/tmtmods.txt -profile docker
+    nextflow run nf-core/labelcheck --mzmls '*.mzML' --tdb swissprot.fa --mods assets/mods.txt -profile docker
 
     Mandatory arguments:
       --mzmls                       Path to mzML files
@@ -26,11 +26,11 @@ def helpMessage() {
                                     tab separated: file-tab-channel path
       --tdb                         Path to target FASTA protein database
       --isobaric VALUE              In case of isobaric, specify: tmt10plex, tmt6plex, itraq8plex, itraq4plex
-      --mods                        Path to MSGF+ modification file (two examples in assets folder)
       -profile                      Configuration profile to use. Can use multiple (comma separated)
                                     Available: conda, docker, singularity, awsbatch, test and more.
 
     Options:
+      --mods                        Path to MSGF+ modification file (default in assets folder)
       --activation VALUE            Specify activation protocol: hcd (DEFAULT), cid, etd for isobaric 
                                     quantification. Not necessary for other functionality.
 
@@ -88,10 +88,12 @@ params.isobaric = false
 params.instrument = 'qe' // Default instrument is Q-Exactive
 params.activation = 'hcd' // Only for isobaric quantification, not for ID with MSGF
 params.outdir = 'results'
+params.mods = "${baseDir}/assets/mods.txt"
 
 
-// Validate and set file inputs
-plextype = params.isobaric ? params.isobaric.replaceFirst(/[0-9]+plex/, "") : 'false'
+// Validate and set inputs
+if (!params.isobaric) exit 1, "Isobaric type needs to be specified"
+plextype = params.isobaric.replaceFirst(/[0-9]+plex/, "")
 mods = file(params.mods)
 if( !mods.exists() ) exit 1, "Modification file not found: ${params.mods}"
 tdb = file(params.tdb)
@@ -101,7 +103,11 @@ output_docs = file("$baseDir/docs/output.md")
 
 // set constant variables
 accolmap = [peptides: 12]
-
+plexmap = [tmt10plex: ["TMT6plex",  229.162932],
+           tmt6plex: ["TMT6plex",  229.162932],
+           itraq8plex: ["iTRAQ8plex", 304.205360],
+           itraq4plex: ["iTRAQ4plex", 144.102063],
+]
 
 // Header log info
 log.info nfcoreHeader()
@@ -228,7 +234,7 @@ process quantifySpectra {
 
   script:
   activationtype = [hcd:'High-energy collision-induced dissociation', cid:'Collision-induced dissociation', etd:'Electron transfer dissociation'][params.activation]
-  massshift = [tmt:0.0013, itraq:0.00125, false:0][plextype]
+  massshift = [tmt:0.0013, itraq:0.00125][plextype]
   """
   source activate openms-2.4.0
   IsobaricAnalyzer  -type $params.isobaric -in $infile -out \"${infile}.consensusXML\" -extraction:select_activation \"$activationtype\" -extraction:reporter_mass_shift $massshift -extraction:min_precursor_intensity 1.0 -extraction:keep_unannotated_precursor true -quantification:isotope_correction true
@@ -308,11 +314,16 @@ process msgfPlus {
   
   script:
   sample = x.baseName.replaceFirst(/\.mzML/, "")
-  // FIXME which protocol, ask someone
-  msgfprotocol = 0 //[tmt:4, itraq:2, false:0][plextype]
+  plex = plexmap[params.isobaric]
+  msgfprotocol = 0 //[tmt:4, itraq:2][plextype]
   msgfinstrument = [velos:1, qe:3, false:0][params.instrument]
   """
-  msgf_plus -Xmx8G -d $db -s $x -o "${setname}.mzid" -thread 2 -mod $mods -tda 0 -t 10.0ppm -ti -1,2 -m 0 -inst ${msgfinstrument} -e 1 -protocol ${msgfprotocol} -ntt 2 -minLength 7 -maxLength 50 -minCharge 2 -maxCharge 6 -n 1 -addFeatures 1
+  # dynamically add isobaric type to mod file
+  cat $mods > iso_mods
+  echo ${plex[1]},*,opt,N-term,${plex[0]} >> iso_mods
+  echo ${plex[1]},K,opt,any,${plex[0]} >> iso_mods
+  # run search and create TSV, cleanup afterwards
+  msgf_plus -Xmx8G -d $db -s $x -o "${setname}.mzid" -thread 2 -mod iso_mods -tda 0 -t 10.0ppm -ti -1,2 -m 0 -inst ${msgfinstrument} -e 1 -protocol ${msgfprotocol} -ntt 2 -minLength 7 -maxLength 50 -minCharge 2 -maxCharge 6 -n 1 -addFeatures 1
   msgf_plus -Xmx3500M edu.ucsd.msjava.ui.MzIDToTsv -i "${setname}.mzid" -o out.mzid.tsv
   rm ${db.baseName.replaceFirst(/\.fasta/, "")}.c*
   """
@@ -419,14 +430,13 @@ process psm2Peptides {
 
   script:
   col = accolmap.peptides + 1  // psm2pep adds a column
+  modweight = Math.round(plexmap[params.isobaric][1] * 1000) / 1000
   """
   # Create peptide table from PSM table, picking best scoring unique peptides
   msspeptable psm2pep -i $psms -o peptides --scorecolpattern svm --spectracol 1 --isobquantcolpattern plex 
   # Move peptide sequence to first column
   paste <( cut -f ${col} peptides) <( cut -f 1-${col-1},${col+1}-500 peptides) > "${setname}"
-
-# FIXME 229 is TMT, also get theother ones, from the mod file!
-  echo -n "$setname" \$(calc_psmstats.py $psms 'Peptide' '+229.163') \$(calc_psmstats.py "$setname" 'Peptide sequence' '+229.163') | tr ' ' '\t'
+  echo -n "$setname" \$(calc_psmstats.py $psms 'Peptide' "+$modweight") \$(calc_psmstats.py "$setname" 'Peptide sequence' "+$modweight") | tr ' ' '\t'
   """
 }
 
