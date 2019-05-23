@@ -111,17 +111,19 @@ Use this to specify the location of your input mzML files. For example:
 ```bash
 --mzML 'path/to/data/sample_*.mzML'
 ```
+
 The path must be enclosed in quotes when using wildcards like `*`
 
 
 ### `--mzmldef`
 Alternative to the above --mzml this would pass a text file which contains the mzML specifications.
+
 ```bash
 --mzmldef /path/to/data/mzmls.txt
 ```
 
 The file itself is tab-separated without header, contains a single line per mzML file specified as follows:
-`/path/to/file	channel_name`
+`/path/to/file<TAB>channel_name`
 
 
 ### `--tdb`
