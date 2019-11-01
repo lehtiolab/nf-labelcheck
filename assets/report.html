@@ -3,7 +3,7 @@
   <meta http-equiv="Content-Security-Policy" content="script-src 'unsafe-inline' https://cdnjs.cloudflare.com https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@0.6;">
   <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/2.8.0/Chart.bundle.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@0.6"></script>
-  <title>Lehtio labelcheck report</title>
+  <title>Labelcheck report</title>
   <link rel="stylesheet" type="text/css" href="https://cdnjs.cloudflare.com/ajax/libs/bulma/0.6.2/css/bulma.min.css">
 </head>
 <body>
@@ -30,7 +30,8 @@ function dset(label, data, bgcol, bordercol) {
           borderColor: bordercol, borderWidth: 1};
 }
 
-function horizBar(setnames, datasets, percent) {
+function horizBar(setnames, datasets) {
+  const xlab = ('totals' in datasets) ? '% labeled' : 'Amount labeled';
   plot = {
     type: 'horizontalBar',
     data: {
@@ -40,6 +41,7 @@ function horizBar(setnames, datasets, percent) {
     options: {
         scales: {
             xAxes: [{
+		scaleLabel: {display: true, labelString: xlab},
                 stacked: true,
             }],
             yAxes: [{
@@ -51,14 +53,14 @@ function horizBar(setnames, datasets, percent) {
         }
     }
   };
-  if (percent) {
+  if ('totals' in datasets) {
     plot['plugins'] = [ChartDataLabels];
     plot['options']['plugins'] = {
       'datalabels': {formatter: function(val, context) {
         var dsets = context.chart.data.datasets;
         var ix = context.dataIndex;
         if (context.datasetIndex === 0) {
-          return Math.round(dsets[0].data[ix] / (dsets[0].data[ix] + dsets[1].data[ix]) * 100) + '%';
+          return datasets.totals[ix];
         } else { return '';}
       }
       }
@@ -88,8 +90,7 @@ function cyclecol(gamma) {
 
 
 function cols(label, gamma) {
-  return {'labeled': cyclecol(gamma)[0],
-    'non-labeled': cyclecol(gamma)[1],}[label]
+  return {'labeled': cyclecol(gamma)[0], 'nonlabeled': cyclecol(gamma)[1],}[label]
 }
 
 Chart.plugins.unregister(ChartDataLabels);
@@ -99,9 +100,15 @@ labeleddata = {{ labeldata }};
 tmtdata = {{ tmtmeans }};
 labdsets = {'psm': [], 'pep': []};
 
-for (ds of labeleddata) {
-  labdsets[ds['feat']].push(dset(ds['label'], ds['data'], cols(ds['label'], 0.2), cols(ds['label'], 1)));
-}
+let lab;
+let nonlab;
+Object.entries(labeleddata).forEach(function(feats) {
+	  lab = feats[1].labeled.map(function(val, ix) { return Math.round(val / (val + feats[1].nonlabeled[ix]) * 10000)/100 });
+	  nonlab = feats[1].nonlabeled.map(function(val, ix) { return Math.round(val / (val + feats[1].labeled[ix]) * 10000)/100 });
+	  labdsets[feats[0]].push(dset('Labeled', lab, cols('labeled', 0.2), cols('labeled', 1)));
+	  labdsets[feats[0]].push(dset('Non-labeled', nonlab, cols('nonlabeled', 0.2), cols('nonlabeled', 1)));
+	  labdsets[feats[0]]['totals'] = feats[1].labeled;
+});
 
 meddsets = [];
 bgcols = cyclecol(0.2);
@@ -111,11 +118,21 @@ for (tmt of Object.entries(tmtdata).map(function(x, ix) {return [x, bgcols[ix], 
 }
 
   
-var psmctx = document.getElementById('psms_labeled').getContext('2d');
-var psmchart = new Chart(psmctx, horizBar({{ setnames }}, labdsets['psm'], true));
-var pepctx = document.getElementById('peptides_labeled').getContext('2d');
-var pepchart = new Chart(pepctx, horizBar({{ setnames }}, labdsets['pep'], true));
-var tmtctx = document.getElementById('tmtmeans').getContext('2d');
+graphheight = 25 + 20 * labeleddata.psm.labeled.length;
+
+var psmcv = document.getElementById('psms_labeled');
+psmcv.height = graphheight;
+var psmctx = psmcv.getContext('2d');
+var psmchart = new Chart(psmctx, horizBar({{ setnames }}, labdsets['psm'], labeleddata.psms));
+
+var pepcv = document.getElementById('peptides_labeled');
+pepcv.height = graphheight;
+var pepctx = pepcv.getContext('2d');
+var pepchart = new Chart(pepctx, horizBar({{ setnames }}, labdsets['pep'], labeleddata.pep));
+
+var tmtcv = document.getElementById('tmtmeans');
+tmtcv.height = graphheight / 2;
+var tmtctx = tmtcv.getContext('2d');
 var pepchart = new Chart(tmtctx, horizBar({{ setnames }}, meddsets));
 </script>
 </html>

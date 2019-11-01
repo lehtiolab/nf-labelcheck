@@ -478,9 +478,10 @@ from jinja2 import Template
 setnames = ["${setnames.join('", "')}"]
 sorted_setnames = ${params.mzmldef ? "sorted(setnames, key=lambda x: (x.split('_')[1:], x.split('_')[0].replace('N', 'A')))" : "setnames"} # sort on N/C if channels
 sorted_setnames_order = [setnames.index(x) for x in sorted_setnames]
-labeldata = [{'feat': 'psm', 'label': 'labeled', 'data': $ok_psms}, {'feat': 'pep', 'label': 'labeled', 'data': $ok_pep}, {'feat': 'psm', 'label': 'non-labeled', 'data': $fail_psms}, {'feat': 'pep', 'label': 'non-labeled', 'data': $fail_pep}]
-for ld in labeldata:
-    ld['data'] = [ld['data'][ix] for ix in sorted_setnames_order]
+labeldata = {
+    'psm': {'labeled': [$ok_psms[ix] for ix in sorted_setnames_order], 'nonlabeled': [$fail_psms[ix] for ix in sorted_setnames_order]}, 
+    'pep': {'labeled': [$ok_pep[ix] for ix in sorted_setnames_order], 'nonlabeled': [$fail_pep[ix] for ix in sorted_setnames_order]}, 
+}
 
 tmtmeans = {}
 meanfns = sorted(glob('means*'), key=lambda x: int(x[x.index('ns')+2:]))
