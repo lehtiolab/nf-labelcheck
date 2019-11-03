@@ -6,8 +6,8 @@ channels:
   - bioconda
   - defaults
 dependencies:
-  - bioconda::msgf_plus=2017.07.21
-  - bioconda::msstitch=2.12
+  - bioconda::msgf_plus=2019.07.03
+  - bioconda::msstitch=2.16
   - conda-forge::biopython=1.72
   - bioconda::percolator=3.1
   - conda-forge::jinja2=2.10
