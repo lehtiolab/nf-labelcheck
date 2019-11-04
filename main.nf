@@ -474,28 +474,36 @@ from glob import glob
 import json
 from jinja2 import Template
   
-setnames = ["${setnames.join('", "')}"]
-sorted_setnames = ${params.mzmldef ? "sorted(setnames, key=lambda x: (x.split('_')[1:], x.split('_')[0].replace('N', 'A')))" : "setnames"} # sort on N/C if channels
-sorted_setnames_order = [setnames.index(x) for x in sorted_setnames]
+filenames = [${filenames.collect() { x -> "'$x'"}.join(',')}]
+channels = [x for x in [${channels.collect() {x -> "'$x'" }.join(',')}] if x!='NA']
+samples = [x for x in [${samples.collect() { x -> "'$x'" }.join(',')}] if x!='NA']
+if len(channels) > 0:
+    sorted_channels = sorted(channels, key=lambda x: x.replace('N', 'A'))
+    sort_order = [channels.index(x) for x in sorted_channels]
+else:
+    sort_order = range(0, len(filenames))
+filenames = [filenames[ix] for ix in sort_order]
+if len(samples) == len(sort_order):
+    samples = [samples[ix] for ix in sort_order]
 labeldata = {
-    'psm': {'labeled': [$ok_psms[ix] for ix in sorted_setnames_order], 'nonlabeled': [$fail_psms[ix] for ix in sorted_setnames_order]}, 
-    'pep': {'labeled': [$ok_pep[ix] for ix in sorted_setnames_order], 'nonlabeled': [$fail_pep[ix] for ix in sorted_setnames_order]}, 
+    'psm': {'labeled': [$ok_psms[ix] for ix in sort_order], 'nonlabeled': [$fail_psms[ix] for ix in sort_order]}, 
+    'pep': {'labeled': [$ok_pep[ix] for ix in sort_order], 'nonlabeled': [$fail_pep[ix] for ix in sort_order]}, 
 }
 
-tmtmeans = {}
+isomeans = {}
 meanfns = sorted(glob('means*'), key=lambda x: int(x[x.index('ns')+2:]))
-for ix in sorted_setnames_order:
+for ix in sort_order:
     with open(meanfns[ix]) as fp:
         for ch,val in json.load(fp).items():
             try:
-                tmtmeans[ch].append(val)
+                isomeans[ch].append(val)
             except KeyError:
-                tmtmeans[ch] = [val]
+                isomeans[ch] = [val]
     
 with open("${baseDir}/assets/report.html") as fp: 
     main = Template(fp.read())
 with open('qc.html', 'w') as fp:
-    fp.write(main.render(setnames=sorted_setnames, labeldata=labeldata, tmtmeans=tmtmeans))
+    fp.write(main.render(filenames=filenames, labeldata=labeldata, channels=channels, samples=samples, isomeans=isomeans))
 """
 }
 

@@ -24,7 +24,7 @@ def get_col_means(fn):
                 except ValueError:
                     pass  # caused by NA
     for col in plexcol:
-        data[col[1]] = mean(data[col[1]])
+        data[re.sub('[a-z0-9]+plex_', '', col[1])] = mean(data.pop(col[1]))
     with open('means', 'w') as fp:
         json.dump(data, fp)
 

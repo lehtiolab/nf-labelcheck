@@ -1,10 +1,13 @@
 <html lang="en">
 <head>
-  <meta http-equiv="Content-Security-Policy" content="script-src 'unsafe-inline' https://cdnjs.cloudflare.com https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@0.6;">
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/2.8.0/Chart.bundle.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@0.6"></script>
-  <title>Labelcheck report</title>
+  <meta http-equiv="Content-Security-Policy" content="script-src 'unsafe-inline' https://cdnjs.cloudflare.com https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@0.7.0;">
+
+  <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/font-awesome/4.5.0/css/font-awesome.min.css">
   <link rel="stylesheet" type="text/css" href="https://cdnjs.cloudflare.com/ajax/libs/bulma/0.6.2/css/bulma.min.css">
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/2.8.0/Chart.bundle.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@0.7.0"></script>
+  <title>Labelcheck report</title>
 </head>
 <body>
   <div class="container">
@@ -20,7 +23,7 @@
       </div>
     </div>
     	<h5 class="title is-5">Mean channel intensities</h5>
-          <canvas id="tmtmeans" ></canvas>
+          <canvas id="isomeans" ></canvas>
   </div>
 </body>
 <script>
@@ -30,12 +33,13 @@ function dset(label, data, bgcol, bordercol) {
           borderColor: bordercol, borderWidth: 1};
 }
 
-function horizBar(setnames, datasets) {
-  const xlab = ('totals' in datasets) ? '% labeled' : 'Amount labeled';
+function horizBar(filenames, datasets, annotation, stepsize=false, annotate_value=false, annotate_icon=false) {
+	
+  const xlab = annotation ? '% labeled' : 'Amount labeled';
   plot = {
     type: 'horizontalBar',
     data: {
-        labels: setnames,
+        labels: filenames,
         datasets: datasets,
     },
     options: {
@@ -43,26 +47,53 @@ function horizBar(setnames, datasets) {
             xAxes: [{
 		scaleLabel: {display: true, labelString: xlab},
                 stacked: true,
+		ticks: {
+                  stepSize: stepsize,
+		},
             }],
             yAxes: [{
                 stacked: true,
                 ticks: {
-                    beginAtZero: true
+                    beginAtZero: true,
                 }
             }]
         }
     }
   };
-  if ('totals' in datasets) {
-    plot['plugins'] = [ChartDataLabels];
-    plot['options']['plugins'] = {
-      'datalabels': {formatter: function(val, context) {
-        var dsets = context.chart.data.datasets;
-        var ix = context.dataIndex;
-        if (context.datasetIndex === 0) {
-          return datasets.totals[ix];
-        } else { return '';}
-      }
+
+  plot.plugins = [ChartDataLabels];
+  plot.options.plugins = {
+    datalabels: {
+      labels: {
+        inBar: {
+          align: 'end', formatter: function(val, context) {
+            var ix = context.dataIndex;
+            if (context.datasetIndex === annotation[ix][0]) {
+               return annotation[ix][1];
+             } else { return '';}
+           }
+         },
+	 icon: {
+           font: {family: 'FontAwesome', size:20,},
+           anchor: 'start',
+           align: 'right',
+           formatter: function(val, context) {
+             var ix = context.dataIndex;
+ 	     if (!annotate_icon || context.datasetIndex !== 0) {
+               return '';
+	     } else { return annotate_icon[ix][1]; }
+	   }
+	 },
+	 value: {
+           anchor: 'start',
+           align: 'right',
+           formatter: function(val, context) {
+             var ix = context.dataIndex;
+ 	     if (!annotate_value || context.datasetIndex !== 0) {
+               return '';
+	     } else { return `${val}%`; }
+	   }
+	 },
       }
     }
   }
@@ -95,44 +126,71 @@ function cols(label, gamma) {
 
 Chart.plugins.unregister(ChartDataLabels);
 
-var psmdatg = [];
-labeleddata = {{ labeldata }};
-tmtdata = {{ tmtmeans }};
-labdsets = {'psm': [], 'pep': []};
+const labeleddata = {{ labeldata }};
+const filenames = {{ filenames }};
+let channel_order = {{ channels }};
+const samples = {{ samples }};
+const isodata = {{ isomeans }};
+const channels = channel_order.length ? channel_order : Object.keys(isodata);
+
+let labdsets = {
+  'psm': {percent: [], annot: []},
+  'pep': {percent: [], annot: []},
+  'iso': {means: [], annot: {bar: [], icon: []}},
+};
 
 let lab;
 let nonlab;
 Object.entries(labeleddata).forEach(function(feats) {
 	  lab = feats[1].labeled.map(function(val, ix) { return Math.round(val / (val + feats[1].nonlabeled[ix]) * 10000)/100 });
 	  nonlab = feats[1].nonlabeled.map(function(val, ix) { return Math.round(val / (val + feats[1].labeled[ix]) * 10000)/100 });
-	  labdsets[feats[0]].push(dset('Labeled', lab, cols('labeled', 0.2), cols('labeled', 1)));
-	  labdsets[feats[0]].push(dset('Non-labeled', nonlab, cols('nonlabeled', 0.2), cols('nonlabeled', 1)));
-	  labdsets[feats[0]]['totals'] = feats[1].labeled;
+	  labdsets[feats[0]].percent.push(dset('Labeled', lab, cols('labeled', 0.2), cols('labeled', 1)));
+	  labdsets[feats[0]].percent.push(dset('Non-labeled', nonlab, cols('nonlabeled', 0.2), cols('nonlabeled', 1)));
+  labdsets[feats[0]].annot = feats[1].labeled.map(function(x, ix) {
+    let text = [];
+    if (channel_order.length) {text.push(channels[ix]); }
+    if (samples.length) {text.push(samples[ix]); }
+    text.push(`Total: ${x}`);
+    return [0, text.join(', ')];
+  });
 });
 
-meddsets = [];
-bgcols = cyclecol(0.2);
-bordercols = cyclecol(1);
-for (tmt of Object.entries(tmtdata).map(function(x, ix) {return [x, bgcols[ix], bordercols[ix]] })) {
-  meddsets.push(dset(tmt[0][0], tmt[0][1], tmt[1], tmt[2]));
-}
+const bgcols = cyclecol(0.2);
+const bordercols = cyclecol(1);
 
-  
+const isomx = channel_order.length ? channels.map(ch => isodata[ch]) : Object.values(isodata);
+isomx[0].map((col, ix) => isomx.map(row => row[ix])).forEach(function(fn_iso, ix) {
+  chix = fn_iso.indexOf(Math.max(...fn_iso));
+  let text = [];
+  if (samples.length) {text.push(`Sample: ${samples[ix]}`); }
+  if (channel_order.length) {text.push(`Channel: ${channels[ix]}`); }
+  text.push(`Max. intensity in: ${[chix]}`);
+  labdsets.iso.annot.bar.push([chix, text.join(', ')]);
+  if (channel_order.length) {
+    labdsets.iso.annot.icon.push([channels.length - 1, chix === ix ? '\uf00c': '\uf00d']);
+  } else {
+    labdsets.iso.annot.icon = false;
+  }
+});
+labdsets.iso.means = channels.map((ch, ix) => dset(ch, isodata[ch], bgcols[ix], bordercols[ix]));
+
+
+
 graphheight = 25 + 20 * labeleddata.psm.labeled.length;
 
 var psmcv = document.getElementById('psms_labeled');
 psmcv.height = graphheight;
 var psmctx = psmcv.getContext('2d');
-var psmchart = new Chart(psmctx, horizBar({{ setnames }}, labdsets['psm'], labeleddata.psms));
+var psmchart = new Chart(psmctx, horizBar(filenames, labdsets.psm.percent, labdsets.psm.annot, stepsize=5, annotate_value=true));
 
 var pepcv = document.getElementById('peptides_labeled');
 pepcv.height = graphheight;
 var pepctx = pepcv.getContext('2d');
-var pepchart = new Chart(pepctx, horizBar({{ setnames }}, labdsets['pep'], labeleddata.pep));
+var pepchart = new Chart(pepctx, horizBar(filenames, labdsets.pep.percent, labdsets.pep.annot, stepsize=5, annotate_value=true));
 
-var tmtcv = document.getElementById('tmtmeans');
-tmtcv.height = graphheight / 2;
-var tmtctx = tmtcv.getContext('2d');
-var pepchart = new Chart(tmtctx, horizBar({{ setnames }}, meddsets));
+var isocv = document.getElementById('isomeans');
+isocv.height = graphheight / 2;
+var isoctx = isocv.getContext('2d');
+var isochart = new Chart(isoctx, horizBar(filenames, labdsets.iso.means, labdsets.iso.annot.bar, false, false, labdsets.iso.annot.icon));
 </script>
 </html>
