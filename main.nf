@@ -190,46 +190,35 @@ process get_software_versions {
     """
 }
 
+// Create channel set [file, filename, channel, sample]
 if (params.mzmldef) {
   Channel
     .from(file("${params.mzmldef}").readLines())
     .map { it -> it.tokenize('\t') }
-    .map { it -> [it[1], file(it[0])] }
-    .map { it -> ["${it[0]}_${it[1].baseName.replaceFirst(/.*\/(\S+)\.mzML/, "\$1")}", it[1]] }
+    .map { it -> [file(it[0]), file(it[0]).baseName.replaceFirst(/.*\/(\S+)\.mzML/, "\$1"), *it[1..-1]] }
     .set { mzml_in }
 } else {
   Channel
     .fromPath(params.mzmls)
-    .map { it -> ["${it.baseName.replaceFirst(/.*\/(\S+)\.mzML/, "\$1")}", it] }
+    .map { it -> [file(it), "${file(it).baseName.replaceFirst(/.*\/(\S+)\.mzML/, "\$1")}", 'NA', 'NA'] }
     .set { mzml_in }
 }
 
-
 mzml_in
-  .tap { mzml_msgf; mzml_quant; sets }
+  .tap { mzml_msgf; mzml_quant }
   .toList()
-  .map { it.sort( {a, b -> a[0] <=> b[0]}) } // sort on sample for consistent .sh script in -resume
-  .map { it -> [it.collect() { it[0] }, it.collect() { it[1] } ] } // lists: [sets], [mzmlfiles]
+  .map { it.sort( {a, b -> a[1] <=> b[1]}) } // sort on sample for consistent .sh script in -resume
+  .map { it -> [it.collect() { it[0] }, it.collect() { it[1] } ] } // lists: [basefns], [mzmlfiles]
   .set{ mzmlfiles_all }
-
-// Set names are first item in input lists, collect them for PSM tables and QC purposes
-sets
-  .map{ it -> it[0] }
-  .unique()
-  .tap { setnames_psm } 
-  .collect()
-  .map { it -> [it] }
-  .into { setnames_featqc; setnames_psmqc }
 
 
 process quantifySpectra {
 
-  // sample is setname in labelchecks!
   input:
-  set val(setname), file(infile) from mzml_quant
+  set file(infile), val(filename), val(channel), val(sample) from mzml_quant
 
   output:
-  set val(setname), file("${infile}.consensusXML") into isobaricxml
+  set val(filename), file("${infile}.consensusXML") into isobaricxml
 
   script:
   activationtype = [hcd:'High-energy collision-induced dissociation', cid:'Collision-induced dissociation', etd:'Electron transfer dissociation'][params.activation]
@@ -244,14 +233,14 @@ process quantifySpectra {
 process createSpectraLookup {
 
   input:
-  set val(setnames), file(mzmlfiles) from mzmlfiles_all
+  set file(mzmlfiles), val(filenames) from mzmlfiles_all
 
   output:
   file 'mslookup_db.sqlite' into speclookup 
 
   script:
   """
-  msslookup spectra -i ${mzmlfiles.join(' ')} --setnames ${setnames.join(' ')}
+  msslookup spectra -i ${mzmlfiles.join(' ')} --setnames ${filenames.join(' ')}
   """
 }
 
@@ -302,16 +291,15 @@ process msgfPlus {
   cpus = config.poolSize < 2 ? config.poolSize : 2
 
   input:
-  set val(setname), file(x) from mzml_msgf
+  set file(x), val(filename), val(channel), val(sample) from mzml_msgf
   file(db) from concatdb
   file mods
 
   output:
-  set val(setname), val(sample), file("${setname}.mzid") into mzids
-  set val(setname), file("${setname}.mzid"), file('out.mzid.tsv') into mzidtsvs
+  set val(filename), val(channel), val(sample), file("${filename}.mzid") into mzids
+  set val(filename), file("${filename}.mzid"), file('out.mzid.tsv') into mzidtsvs
   
   script:
-  sample = x.baseName.replaceFirst(/\.mzML/, "")
   plex = plexmap[params.isobaric]
   msgfprotocol = 0 //[tmt:4, itraq:2][plextype]
   msgfinstrument = [velos:1, qe:3, false:0][params.instrument]
@@ -321,29 +309,29 @@ process msgfPlus {
   echo ${plex[1]},*,opt,N-term,${plex[0]} >> iso_mods
   echo ${plex[1]},K,opt,any,${plex[0]} >> iso_mods
   # run search and create TSV, cleanup afterwards
-  msgf_plus -Xmx8G -d $db -s $x -o "${setname}.mzid" -thread 2 -mod iso_mods -tda 0 -t 10.0ppm -ti -1,2 -m 0 -inst ${msgfinstrument} -e 1 -protocol ${msgfprotocol} -ntt 2 -minLength 7 -maxLength 50 -minCharge 2 -maxCharge 6 -n 1 -addFeatures 1
-  msgf_plus -Xmx3500M edu.ucsd.msjava.ui.MzIDToTsv -i "${setname}.mzid" -o out.mzid.tsv
+  msgf_plus -Xmx8G -d $db -s $x -o "${filename}.mzid" -thread 2 -mod iso_mods -tda 0 -t 10.0ppm -ti -1,2 -m 0 -inst ${msgfinstrument} -e 1 -protocol ${msgfprotocol} -ntt 2 -minLength 7 -maxLength 50 -minCharge 2 -maxCharge 6 -n 1 -addFeatures 1
+  msgf_plus -Xmx3500M edu.ucsd.msjava.ui.MzIDToTsv -i "${filename}.mzid" -o out.mzid.tsv
   rm ${db.baseName.replaceFirst(/\.fasta/, "")}.c*
   """
 }
 
 // in case we have multiple files per set in the future (you never know), we group by set
 mzids
-  .groupTuple()
+  .groupTuple(by: [0,1,2])
   .set { mzids_2pin }
 
 
 process percolator {
 
   input:
-  set val(setname), val(samples), file('mzid?') from mzids_2pin
+  set val(filename), val(channel), val(sample), file(mzids) from mzids_2pin
 
   output:
-  set val(setname), file('perco.xml') into percolated
+  set val(filename), val(channel), val(sample), file('perco.xml') into percolated
 
   """
   mkdir mzids
-  count=1;for sam in ${samples.join(' ')}; do ln -s `pwd`/mzid\$count mzids/\${sam}.mzid; echo mzids/\${sam}.mzid >> metafile; ((count++));done
+  for mzid in ${mzids.join(' ')}; do echo \${mzid} >> metafile; done
   msgf2pin -o percoin.xml -e trypsin -P "decoy_" metafile
   percolator -j percoin.xml -X perco.xml -N 500000 --decoy-xml-output -y
   """
@@ -359,10 +347,10 @@ mzidtsvs
 process svmToTSV {
 
   input:
-  set val(setname), file('mzident????'), file('mzidtsv????'), file(perco) from mzperco 
+  set val(filename), file('mzident????'), file('mzidtsv????'), val(channel), val(sample), file(perco) from mzperco 
 
   output:
-  set val(setname), file('tmzidperco') into tmzidtsv_perco
+  set val(filename), val(channel), val(sample), file('tmzidperco') into tmzidtsv_perco
 
   script:
   """
@@ -373,8 +361,9 @@ process svmToTSV {
 // Collect percolator data of target and feed into PSM table creation
 tmzidtsv_perco
   .toList()
-  .map { it.sort( {a, b -> a[0] <=> b[0]}) } // sort on setname for resumable PSM table
-  .map { it -> [it.collect() { it[0]}, it.collect() { it[1] }] }
+  .map { it.sort( {a, b -> a[0] <=> b[0]}) } // sort on filename for resumable PSM table
+  .transpose()
+  .toList()
   .combine(quantlookup)
   .set { prepsm }
 
@@ -386,12 +375,10 @@ tmzidtsv_perco
 process createPSMTable {
 
   input:
-  set val(setnames), file('psms?'), file('lookup') from prepsm
-  file(tdb)
+  set val(filenames), val(channels), val(samples), file('psms?'), file('lookup') from prepsm
 
   output:
-  file("${outpsms}") into psm_result
-  set val({setnames.collect() { it }}), file({setnames.collect() { it + '.tsv' }}) into setpsmtables
+  set val(filenames), val(channels), val(samples), file({filenames.collect() { it + '.tsv' }}) into setpsmtables
   
 
   script:
@@ -412,19 +399,16 @@ process createPSMTable {
 }
 
 setpsmtables
-  .map { it -> [it[0], it[1]] }
   .transpose()
   .set { psm_pep }
 
 process psm2Peptides {
 
   input:
-  set val(setname), file(psms) from psm_pep
+  set val(filename), val(channel), val(sample), file(psms) from psm_pep
   
   output:
-  file("${setname}") into peptides_out
-  stdout into psm_stats
-  set val("$setname"), file("means") into psmmeans
+  set val(filename), stdout, val(channel), val(sample), file("means") into psmmeans
 
   script:
   col = accolmap.peptides + 1  // psm2pep adds a column
@@ -433,24 +417,18 @@ process psm2Peptides {
   # Create peptide table from PSM table, picking best scoring unique peptides
   msspeptable psm2pep -i $psms -o peptides --scorecolpattern svm --spectracol 1 --isobquantcolpattern plex 
   # Move peptide sequence to first column
-  paste <( cut -f ${col} peptides) <( cut -f 1-${col-1},${col+1}-500 peptides) > "${setname}"
-  echo -n "$setname" \$(calc_psmstats.py $psms 'Peptide' "+$modweight") \$(calc_psmstats.py "$setname" 'Peptide sequence' "+$modweight") | tr ' ' '\t'
+  paste <( cut -f ${col} peptides) <( cut -f 1-${col-1},${col+1}-500 peptides) > "${filename}.peps"
+  echo -n \$(calc_psmstats.py $psms 'Peptide' "+${modweight}") \$(calc_psmstats.py "${filename}.peps" 'Peptide sequence' "+${modweight}") | tr ' ' '\t'
   """
 }
 
-
-psm_stats
-  .map { it -> it.tokenize('\t') }
-  .join(psmmeans)
+psmmeans
+  .map { it -> [it[0], *it[1].tokenize('\t'), *it[2..-1] ] }
   .toList()
-  .map { it.sort( {a, b -> a[0] <=> b[0]}) } // sort on sample for consistent .sh script in -resume
+  .map { it.sort( {a, b -> a[0] <=> b[0]}) } // sort on filename for consistent .sh script in -resume
   .transpose()
   .toList()
   .set { psm_values }
-
-peptides_out
-  .toList()
-  .set { peptide_tables }
 
 
 process reportLabelCheck {
@@ -459,9 +437,7 @@ process reportLabelCheck {
   publishDir "${params.outdir}", mode: 'copy'
 
   input:
-  file('peps*') from peptide_tables
-  set val(setnames), val(ok_psms), val(fail_psms), val(ok_pep), val(fail_pep), file('means*') from psm_values
-  file(psms) from psm_result
+  set val(filenames), val(ok_psms), val(fail_psms), val(ok_pep), val(fail_pep), val(channels), val(samples), file('means*') from psm_values
 
   output:
   file('qc.html') into results
