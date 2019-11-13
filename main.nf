@@ -190,17 +190,21 @@ process get_software_versions {
     """
 }
 
+def or_na(it, length){
+    return it.size() > length ? it[length] : 'NA'
+}
+
 // Create channel set [file, filename, channel, sample]
 if (params.mzmldef) {
   Channel
     .from(file("${params.mzmldef}").readLines())
     .map { it -> it.tokenize('\t') }
-    .map { it -> [file(it[0]), file(it[0]).baseName.replaceFirst(/.*\/(\S+)\.mzML/, "\$1"), *it[1..-1]] }
+    .map { it -> [file(it[0]), file(it[0]).baseName, or_na(it, 1), or_na(it, 2)] }
     .set { mzml_in }
 } else {
   Channel
     .fromPath(params.mzmls)
-    .map { it -> [file(it), "${file(it).baseName.replaceFirst(/.*\/(\S+)\.mzML/, "\$1")}", 'NA', 'NA'] }
+    .map { it -> [file(it[0]), file(it[0]).baseName, 'NA', 'NA'] }
     .set { mzml_in }
 }
 
