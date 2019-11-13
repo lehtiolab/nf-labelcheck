@@ -204,7 +204,7 @@ if (params.mzmldef) {
 } else {
   Channel
     .fromPath(params.mzmls)
-    .map { it -> [file(it[0]), file(it[0]).baseName, 'NA', 'NA'] }
+    .map { it -> [file(it), file(it).baseName, 'NA', 'NA'] }
     .set { mzml_in }
 }
 
