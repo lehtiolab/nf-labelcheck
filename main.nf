@@ -451,20 +451,18 @@ import json
 from jinja2 import Template
   
 filenames = [${filenames.collect() { x -> "'$x'"}.join(',')}]
-channels = [x for x in [${channels.collect() {x -> "'$x'" }.join(',')}] if x!='NA']
 samples = [x for x in [${samples.collect() { x -> "'$x'" }.join(',')}] if x!='NA']
-if len(channels) > 0:
-    sorted_channels = sorted(channels, key=lambda x: x.replace('N', 'A'))
-    sort_order = [channels.index(x) for x in sorted_channels]
+inputchannels = [x for x in [${channels.collect() {x -> "'$x'" }.join(',')}] if x!='NA']
+if len(inputchannels) > 0:
+    sorted_channels = sorted(inputchannels, key=lambda x: x.replace('N', 'A'))
+    sort_order = [inputchannels.index(x) for x in sorted_channels]
 else:
     sort_order = range(0, len(filenames))
+    sorted_channels = []
+
 filenames = [filenames[ix] for ix in sort_order]
 if len(samples) == len(sort_order):
     samples = [samples[ix] for ix in sort_order]
-labeldata = {
-    'psm': {'labeled': [$ok_psms[ix] for ix in sort_order], 'nonlabeled': [$fail_psms[ix] for ix in sort_order]}, 
-    'pep': {'labeled': [$ok_pep[ix] for ix in sort_order], 'nonlabeled': [$fail_pep[ix] for ix in sort_order]}, 
-}
 
 isomeans = {}
 meanfns = sorted(glob('means*'), key=lambda x: int(x[x.index('ns')+2:]))
@@ -475,11 +473,17 @@ for ix in sort_order:
                 isomeans[ch].append(val)
             except KeyError:
                 isomeans[ch] = [val]
+channels = sorted([x for x in isomeans.keys()], key=lambda x: x.replace('N', 'A'))
     
+labeldata = {
+    'psm': {'labeled': [$ok_psms[ix] for ix in sort_order], 'nonlabeled': [$fail_psms[ix] for ix in sort_order]}, 
+    'pep': {'labeled': [$ok_pep[ix] for ix in sort_order], 'nonlabeled': [$fail_pep[ix] for ix in sort_order]}, 
+}
+
 with open("${baseDir}/assets/report.html") as fp: 
     main = Template(fp.read())
 with open('qc.html', 'w') as fp:
-    fp.write(main.render(filenames=filenames, labeldata=labeldata, channels=channels, samples=samples, isomeans=isomeans))
+    fp.write(main.render(filenames=filenames, labeldata=labeldata, channels=channels, inputchannels=sorted_channels, samples=samples, isomeans=isomeans))
 """
 }
 

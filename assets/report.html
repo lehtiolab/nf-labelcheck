@@ -128,10 +128,10 @@ Chart.plugins.unregister(ChartDataLabels);
 
 const labeleddata = {{ labeldata }};
 const filenames = {{ filenames }};
-let channel_order = {{ channels }};
+const channel_order = {{ channels }};
 const samples = {{ samples }};
 const isodata = {{ isomeans }};
-const channels = channel_order.length ? channel_order : Object.keys(isodata);
+let inputchannels = {{ inputchannels }};
 
 let labdsets = {
   'psm': {percent: [], annot: []},
@@ -148,7 +148,7 @@ Object.entries(labeleddata).forEach(function(feats) {
 	  labdsets[feats[0]].percent.push(dset('Non-labeled', nonlab, cols('nonlabeled', 0.2), cols('nonlabeled', 1)));
   labdsets[feats[0]].annot = feats[1].labeled.map(function(x, ix) {
     let text = [];
-    if (channel_order.length) {text.push(channels[ix]); }
+    if (inputchannels.length) {text.push(inputchannels[ix]); }
     if (samples.length) {text.push(samples[ix]); }
     text.push(`Total: ${x}`);
     return [0, text.join(', ')];
@@ -158,21 +158,35 @@ Object.entries(labeleddata).forEach(function(feats) {
 const bgcols = cyclecol(0.2);
 const bordercols = cyclecol(1);
 
-const isomx = channel_order.length ? channels.map(ch => isodata[ch]) : Object.values(isodata);
-isomx[0].map((col, ix) => isomx.map(row => row[ix])).forEach(function(fn_iso, ix) {
-  chix = fn_iso.indexOf(Math.max(...fn_iso));
-  let text = [];
-  if (samples.length) {text.push(`Sample: ${samples[ix]}`); }
-  if (channel_order.length) {text.push(`Channel: ${channels[ix]}`); }
-  text.push(`Max. intensity in: ${[chix]}`);
-  labdsets.iso.annot.bar.push([chix, text.join(', ')]);
-  if (channel_order.length) {
-    labdsets.iso.annot.icon.push([channels.length - 1, chix === ix ? '\uf00c': '\uf00d']);
-  } else {
-    labdsets.iso.annot.icon = false;
-  }
+// Create isobaric data matrix, transpose and calculate the max values in it per file
+// Add text labels
+let fnch;
+let fnsam;
+let isomx = Object.entries(isodata).sort((x, y )=> x[0].replace('N', 'A') > y[0].replace('N', 'A'))
+if (inputchannels.length) {
+	  fnch = Object.fromEntries(filenames.map((fn, ix) => [fn, inputchannels[ix]]));
+}
+if (inputchannels.length && samples.length) {
+	  fnsam = Object.fromEntries(filenames.map((fn, ix) => [fn, samples[ix]]));
+}
+
+//transpose to array [[channel-values-of-first-file], [...second-file], ...]
+const isotp = isomx[0][1].map((col, ix) => isomx.map(row => row[1][ix]));
+isotp.forEach(function(fn_iso, fnix) {
+	  const chmax_ix = fn_iso.indexOf(Math.max(...fn_iso));
+	  const fn = filenames[fnix];
+	  let text = [];
+	  if (samples.length) {text.push(`Sample: ${fnsam[fn]}`); }
+	  if (inputchannels.length) {text.push(`Channel: ${fnch[fn]}`); }
+	  text.push(`Max. intensity in: ${isomx[chmax_ix][0]}`);
+	  labdsets.iso.annot.bar.push([chmax_ix, text.join(', ')]);
+	  if (inputchannels.length) {
+		      labdsets.iso.annot.icon.push([inputchannels.length - 1, isomx[chmax_ix][0] === inputchannels[fnix] ? '\uf00c': '\uf00d']);
+		    } else {
+			        labdsets.iso.annot.icon = false;
+			      }
 });
-labdsets.iso.means = channels.map((ch, ix) => dset(ch, isodata[ch], bgcols[ix], bordercols[ix]));
+labdsets.iso.means = isomx.map((chval, ix) => dset(chval[0], isodata[chval[0]], bgcols[ix], bordercols[ix]));
 
 
 
