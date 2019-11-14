@@ -427,14 +427,18 @@ process psm2Peptides {
 }
 
 // Let user input channel decide order of filenames
-input_order
-  .map { it -> it[1] }  // base filenames
-  .cross(psmmeans)
-  .map { it -> [it[0], *it[1][1..-1]] }
+psmmeans
   .map { it -> [it[0], *it[1].tokenize('\t'), *it[2..-1] ] }
   .toList()
   .transpose()
   .toList()
+  .set { psmdata }
+
+input_order
+  .map { it -> it[1] } // base filenames
+  .toList()
+  .map { it -> [it] } // when merging to keep this a list
+  .merge(psmdata)
   .set { psm_values }
 
 
@@ -444,7 +448,7 @@ process reportLabelCheck {
   publishDir "${params.outdir}", mode: 'copy'
 
   input:
-  set val(filenames), val(ok_psms), val(fail_psms), val(ok_pep), val(fail_pep), val(channels), val(samples), file('means*') from psm_values
+  set val(ordered_fns), val(filenames), val(ok_psms), val(fail_psms), val(ok_pep), val(fail_pep), val(channels), val(samples), file('means*') from psm_values
 
   output:
   file('qc.html') into results
@@ -457,35 +461,25 @@ from glob import glob
 import json
 from jinja2 import Template
   
+# Data arrives, 
+ordered_fns = [${ordered_fns.collect() { x -> "'$x'"}.join(',')}]
 filenames = [${filenames.collect() { x -> "'$x'"}.join(',')}]
 samples = [${samples.collect() { x -> "'$x'" }.join(',')}]
 inputchannels = [${channels.collect() {x -> "'$x'" }.join(',')}]
-# barplots are sorted by channel (N(itrogen) before C(arbon))
-# Assumes the input order is important so it creates blocks of channels (multiple tmt sets)
+
+# sort on user inputted file order from mzmldef
+sort_order = [filenames.index(fn) for fn in ordered_fns]
+filenames = [filenames[ix] for ix in sort_order]
 if len(inputchannels) > 0 and any([x != 'NA' for x in inputchannels]):
-    ch_blocks = [[]]
-    # assumes grouped blocks of filenames with samples
-    for ch, fn in zip(inputchannels, filenames):
-        if ch in ch_blocks[-1]:
-            ch_blocks.append([ch])
-        else:
-            ch_blocks[-1].append(ch)
-    sort_ch_range = [sorted(enumerate(chs), key=lambda x: x[1].replace('N', 'A')) for chs in ch_blocks]
-    sort_order = []
-    for chr in sort_ch_range:
-        sort_order.extend([x[0] + len(sort_order) for x in chr])
     sorted_channels = [inputchannels[ix] for ix in sort_order]
 else:
     sorted_channels = []
-    sort_order = range(0, len(filenames))
-
 if all([x == 'NA' for x in samples]):
     samples = []
 else:
     samples = [samples[ix] for ix in sort_order]
 
-filenames = [filenames[ix] for ix in sort_order]
-
+# collect tmt mean intensities (keep input sort order for bars)
 isomeans = {}
 meanfns = sorted(glob('means*'), key=lambda x: int(x[x.index('ns')+2:]))
 for ix in sort_order:
@@ -497,11 +491,13 @@ for ix in sort_order:
                 isomeans[ch] = [val]
 channels = sorted([x for x in isomeans.keys()], key=lambda x: x.replace('N', 'A'))
     
+# data for % labeled in input-file order
 labeldata = {
     'psm': {'labeled': [$ok_psms[ix] for ix in sort_order], 'nonlabeled': [$fail_psms[ix] for ix in sort_order]}, 
     'pep': {'labeled': [$ok_pep[ix] for ix in sort_order], 'nonlabeled': [$fail_pep[ix] for ix in sort_order]}, 
 }
 
+# write to HTML template
 with open("${baseDir}/assets/report.html") as fp: 
     main = Template(fp.read())
 with open('qc.html', 'w') as fp:
