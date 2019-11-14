@@ -209,7 +209,7 @@ if (params.mzmldef) {
 }
 
 mzml_in
-  .tap { mzml_msgf; mzml_quant }
+  .tap { mzml_msgf; mzml_quant; input_order }
   .toList()
   .map { it.sort( {a, b -> a[1] <=> b[1]}) } // sort on sample for consistent .sh script in -resume
   .map { it -> [it.collect() { it[0] }, it.collect() { it[1] } ] } // lists: [basefns], [mzmlfiles]
@@ -426,10 +426,13 @@ process psm2Peptides {
   """
 }
 
-psmmeans
+// Let user input channel decide order of filenames
+input_order
+  .map { it -> it[1] }  // base filenames
+  .cross(psmmeans)
+  .map { it -> [it[0], *it[1][1..-1]] }
   .map { it -> [it[0], *it[1].tokenize('\t'), *it[2..-1] ] }
   .toList()
-  .map { it.sort( {a, b -> a[0] <=> b[0]}) } // sort on filename for consistent .sh script in -resume
   .transpose()
   .toList()
   .set { psm_values }
@@ -455,18 +458,33 @@ import json
 from jinja2 import Template
   
 filenames = [${filenames.collect() { x -> "'$x'"}.join(',')}]
-samples = [x for x in [${samples.collect() { x -> "'$x'" }.join(',')}] if x!='NA']
-inputchannels = [x for x in [${channels.collect() {x -> "'$x'" }.join(',')}] if x!='NA']
-if len(inputchannels) > 0:
-    sorted_channels = sorted(inputchannels, key=lambda x: x.replace('N', 'A'))
-    sort_order = [inputchannels.index(x) for x in sorted_channels]
+samples = [${samples.collect() { x -> "'$x'" }.join(',')}]
+inputchannels = [${channels.collect() {x -> "'$x'" }.join(',')}]
+# barplots are sorted by channel (N(itrogen) before C(arbon))
+# Assumes the input order is important so it creates blocks of channels (multiple tmt sets)
+if len(inputchannels) > 0 and any([x != 'NA' for x in inputchannels]):
+    ch_blocks = [[]]
+    # assumes grouped blocks of filenames with samples
+    for ch, fn in zip(inputchannels, filenames):
+        if ch in ch_blocks[-1]:
+            ch_blocks.append([ch])
+        else:
+            ch_blocks[-1].append(ch)
+    sort_ch_range = [sorted(enumerate(chs), key=lambda x: x[1].replace('N', 'A')) for chs in ch_blocks]
+    sort_order = []
+    for chr in sort_ch_range:
+        sort_order.extend([x[0] + len(sort_order) for x in chr])
+    sorted_channels = [inputchannels[ix] for ix in sort_order]
 else:
-    sort_order = range(0, len(filenames))
     sorted_channels = []
+    sort_order = range(0, len(filenames))
+
+if all([x == 'NA' for x in samples]):
+    samples = []
+else:
+    samples = [samples[ix] for ix in sort_order]
 
 filenames = [filenames[ix] for ix in sort_order]
-if len(samples) == len(sort_order):
-    samples = [samples[ix] for ix in sort_order]
 
 isomeans = {}
 meanfns = sorted(glob('means*'), key=lambda x: int(x[x.index('ns')+2:]))
