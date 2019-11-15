@@ -89,10 +89,10 @@ If `-profile` is not specified at all the pipeline will be run locally and expec
   * Pulls most software from [Bioconda](https://bioconda.github.io/)
 * `docker`
   * A generic configuration profile to be used with [Docker](http://docker.com/)
-  * Pulls software from dockerhub: [`nf-labelcheck`](http://hub.docker.com/r/glormph/nfcore-labelcheck/)
+  * Pulls software from dockerhub: [`nf-labelcheck`](http://hub.docker.com/r/lehtiolab/nf-labelcheck/)
 * `singularity`
   * A generic configuration profile to be used with [Singularity](http://singularity.lbl.gov/)
-  * Pulls software from DockerHub: [`nf-labelcheck`](http://hub.docker.com/r/glormph/nfcore-labelcheck/)
+  * Pulls software from DockerHub: [`nf-labelcheck`](http://hub.docker.com/r/lehtiolab/nf-labelcheck/)
 * `test`
   * A profile with a complete configuration for automated testing
   * Includes links to test data so needs no other parameters
