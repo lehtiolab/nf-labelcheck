@@ -7,12 +7,11 @@
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/2.8.0/Chart.bundle.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@0.7.0"></script>
-  <title>Labelcheck report -- {{ reportname }}</title>
+  <title>Labelcheck report</title>
 </head>
 <body>
   <div class="container">
     <h3 class="title is-3">Labelcheck report</h3>
-    <h4 class="subtitle is-4">{{ reportname }}</h4>
     <div class="columns">
       <div class="column">
     	<h5 class="title is-5"># PSMs</h5>
@@ -24,7 +23,7 @@
       </div>
     </div>
     	<h5 class="title is-5">Mean channel intensities</h5>
-          <canvas id="isomeans"></canvas>
+          <canvas id="isomeans" ></canvas>
   </div>
 </body>
 <script>
@@ -127,12 +126,12 @@ function cols(label, gamma) {
 
 Chart.plugins.unregister(ChartDataLabels);
 
-const labeleddata = {{ labeldata }};
-const filenames = {{ filenames }};
-const channel_order = {{ channels }};
-const samples = {{ samples }};
-const isodata = {{ isomeans }};
-let inputchannels = {{ inputchannels }};
+const labeleddata = {'psm': {'labeled': [775, 795, 774, 782], 'nonlabeled': [5, 11, 5, 19]}, 'pep': {'labeled': [355, 346, 364, 358], 'nonlabeled': [4, 9, 4, 15]}};
+const filenames = ['20190101_setA_LC_01', '20190101_setA_LC_02', '20190101_setA_LC_03', '20190101_setA_LC_04'];
+const channel_order = ['126', '127N', '127C', '128N', '128C', '129N', '129C', '130N', '130C', '131'];
+const samples = ['sample1', 'sample3', 'sample2', 'sampleD'];
+const isodata = {'126': [1529971.6968564356, 6537.488514285715, 6135.408201017812, 3328.629404314721], '127N': [1198.0388141089109, 4782.207910169492, 14.352091603053436, 842029.3028172589], '127C': [133199.45719554456, 1318581.4773607748, 22.07441603053435, 11207.687385786801], '128N': [0.2666658415841584, 1478.5425384987893, 27.330648854961833, 67203.8443857868], '128C': [348.3503673267327, 105769.36589346247, 28.418297709923664, 328.78793223350254], '129N': [19.09072277227723, 0.0, 0.25999236641221374, 141.78967538071066], '129C': [15.39638292079208, 141.83685569007264, 2.0399737913486002, 5.103044416243655], '130N': [0.0, 81.55449467312349, 26824.756556234097, 16.98000507614213], '130C': [0.0, 0.0, 139.033193129771, 5.219619289340102], '131': [33.32301608910891, 16281.701338983052, 884142.5308905853, 3683.6631269035533]};
+let inputchannels = ['126', '126', '127N', '127N'];
 
 let labdsets = {
   'psm': {percent: [], annot: []},

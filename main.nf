@@ -1,11 +1,11 @@
 #!/usr/bin/env nextflow
 /*
 ========================================================================================
-                         nf-core/labelcheck
+                         lehtiolab/nf-labelcheck
 ========================================================================================
- nf-core/labelcheck Analysis Pipeline.
+ lehtiolab/nf-labelcheck Analysis Pipeline.
  #### Homepage / Documentation
- https://github.com/nf-core/labelcheck
+ https://github.com/lehtiolab/nf-labelcheck
 ----------------------------------------------------------------------------------------
 */
 
@@ -18,7 +18,7 @@ def helpMessage() {
 
     The typical command for running the pipeline is as follows:
 
-    nextflow run nf-core/labelcheck --mzmls '*.mzML' --tdb swissprot.fa --mods assets/mods.txt -profile docker
+    nextflow run lehtiolab/nf-labelcheck --mzmls '*.mzML' --tdb swissprot.fa --mods assets/mods.txt -profile docker
 
     Mandatory arguments:
       --mzmls                       Path to mzML files
@@ -148,10 +148,10 @@ checkHostname()
 def create_workflow_summary(summary) {
     def yaml_file = workDir.resolve('workflow_summary_mqc.yaml')
     yaml_file.text  = """
-    id: 'nf-core-labelcheck-summary'
+    id: 'nf-labelcheck-summary'
     description: " - this information is collected when the pipeline is started."
-    section_name: 'nf-core/labelcheck Workflow Summary'
-    section_href: 'https://github.com/nf-core/labelcheck'
+    section_name: 'lehtiolab/nf-labelcheck Workflow Summary'
+    section_href: 'https://github.com/lehtiolab/nf-labelcheck'
     plot_type: 'html'
     data: |
         <dl class=\"dl-horizontal\">
@@ -306,14 +306,14 @@ process msgfPlus {
   script:
   plex = plexmap[params.isobaric]
   msgfprotocol = 0 //[tmt:4, itraq:2][plextype]
-  msgfinstrument = [velos:1, qe:3, false:0][params.instrument]
+  msgfinstrument = [orbi:1, velos:1, qe:3, lowres:0, tof:2][params.instrument]
   """
   # dynamically add isobaric type to mod file
   cat $mods > iso_mods
   echo ${plex[1]},*,opt,N-term,${plex[0]} >> iso_mods
   echo ${plex[1]},K,opt,any,${plex[0]} >> iso_mods
   # run search and create TSV, cleanup afterwards
-  msgf_plus -Xmx8G -d $db -s $x -o "${filename}.mzid" -thread 2 -mod iso_mods -tda 0 -t 10.0ppm -ti -1,2 -m 0 -inst ${msgfinstrument} -e 1 -protocol ${msgfprotocol} -ntt 2 -minLength 7 -maxLength 50 -minCharge 2 -maxCharge 6 -n 1 -addFeatures 1
+  msgf_plus -Xmx8G -d $db -s $x -o "${filename}.mzid" -thread ${task.cpus * 3} -mod iso_mods -tda 0 -t 10.0ppm -ti -1,2 -m 0 -inst ${msgfinstrument} -e 1 -protocol ${msgfprotocol} -ntt 2 -minLength 7 -maxLength 50 -minCharge 2 -maxCharge 6 -n 1 -addFeatures 1
   msgf_plus -Xmx3500M edu.ucsd.msjava.ui.MzIDToTsv -i "${filename}.mzid" -o out.mzid.tsv
   rm ${db.baseName.replaceFirst(/\.fasta/, "")}.c*
   """
@@ -501,7 +501,7 @@ labeldata = {
 with open("${baseDir}/assets/report.html") as fp: 
     main = Template(fp.read())
 with open('qc.html', 'w') as fp:
-    fp.write(main.render(filenames=filenames, labeldata=labeldata, channels=channels, inputchannels=sorted_channels, samples=samples, isomeans=isomeans))
+    fp.write(main.render(reportname='{{ custom_runName }}', filenames=filenames, labeldata=labeldata, channels=channels, inputchannels=sorted_channels, samples=samples, isomeans=isomeans))
 """
 }
 
@@ -533,9 +533,9 @@ process output_documentation {
 workflow.onComplete {
 
     // Set up the e-mail variables
-    def subject = "[nf-core/labelcheck] Successful: $workflow.runName"
+    def subject = "[lehtiolab/nf-labelcheck] Successful: $workflow.runName"
     if(!workflow.success){
-      subject = "[nf-core/labelcheck] FAILED: $workflow.runName"
+      subject = "[lehtiolab/nf-labelcheck] FAILED: $workflow.runName"
     }
     def email_fields = [:]
     email_fields['version'] = workflow.manifest.version
@@ -585,11 +585,11 @@ workflow.onComplete {
           if( params.plaintext_email ){ throw GroovyException('Send plaintext e-mail, not HTML') }
           // Try to send HTML e-mail using sendmail
           [ 'sendmail', '-t' ].execute() << sendmail_html
-          log.info "[nf-core/labelcheck] Sent summary e-mail to $params.email (sendmail)"
+          log.info "[lehtiolab/nf-labelcheck] Sent summary e-mail to $params.email (sendmail)"
         } catch (all) {
           // Catch failures and try with plaintext
           [ 'mail', '-s', subject, params.email ].execute() << email_txt
-          log.info "[nf-core/labelcheck] Sent summary e-mail to $params.email (mail)"
+          log.info "[lehtiolab/nf-labelcheck] Sent summary e-mail to $params.email (mail)"
         }
     }
 
@@ -615,10 +615,10 @@ workflow.onComplete {
     }
 
     if(workflow.success){
-        log.info "${c_purple}[nf-core/labelcheck]${c_green} Pipeline completed successfully${c_reset}"
+        log.info "${c_purple}[lehtiolab/nf-labelcheck]${c_green} Pipeline completed successfully${c_reset}"
     } else {
         checkHostname()
-        log.info "${c_purple}[nf-core/labelcheck]${c_red} Pipeline completed with errors${c_reset}"
+        log.info "${c_purple}[lehtiolab/nf-labelcheck]${c_red} Pipeline completed with errors${c_reset}"
     }
 
 }
@@ -642,7 +642,7 @@ def nfcoreHeader(){
     ${c_blue}  |\\ | |__  __ /  ` /  \\ |__) |__         ${c_yellow}}  {${c_reset}
     ${c_blue}  | \\| |       \\__, \\__/ |  \\ |___     ${c_green}\\`-._,-`-,${c_reset}
                                             ${c_green}`._,._,\'${c_reset}
-    ${c_purple}  nf-core/labelcheck v${workflow.manifest.version}${c_reset}
+    ${c_purple}  lehtiolab/nf-labelcheck v${workflow.manifest.version}${c_reset}
     ${c_dim}----------------------------------------------------${c_reset}
     """.stripIndent()
 }

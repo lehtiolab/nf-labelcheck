@@ -1,6 +1,7 @@
-# nf-core/labelcheck: Output
+# lehtiolab/nf-labelcheck: Output
 
-This document describes the output produced by the pipeline. Most of the plots are taken from the MultiQC report, which summarises results at the end of the pipeline.
+## Output
+The output is a single file, qc.html, which summarises the result of the labelcheck run. See an example [here](example_qc.html)
 
 ## Pipeline overview
 The pipeline is built using [Nextflow](https://www.nextflow.io/)

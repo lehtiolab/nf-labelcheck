@@ -1,4 +1,4 @@
-# nf-core/labelcheck: Usage
+# lehtiolab/nf-labelcheck: Usage
 
 ## Table of contents
 
@@ -10,13 +10,6 @@
   * [Updating the pipeline](#updating-the-pipeline)
   * [Reproducibility](#reproducibility)
 * [Main arguments](#main-arguments)
-  * [`-profile`](#-profile)
-  * [`--reads`](#--reads)
-  * [`--singleEnd`](#--singleend)
-* [Reference genomes](#reference-genomes)
-  * [`--genome` (using iGenomes)](#--genome-using-igenomes)
-  * [`--fasta`](#--fasta)
-  * [`--igenomesIgnore`](#--igenomesignore)
 * [Job resources](#job-resources)
   * [Automatic resubmission](#automatic-resubmission)
   * [Custom resource requests](#custom-resource-requests)
@@ -36,7 +29,6 @@
   * [`--max_cpus`](#--max_cpus)
   * [`--plaintext_email`](#--plaintext_email)
   * [`--monochrome_logs`](#--monochrome_logs)
-  * [`--multiqc_config`](#--multiqc_config)
 <!-- TOC END -->
 
 
@@ -54,7 +46,7 @@ NXF_OPTS='-Xms1g -Xmx4g'
 The typical command for running the pipeline is as follows:
 
 ```bash
-nextflow run glormph/nf-core-labelcheck --mzmls '*.mzML' --tdb swissprot_20181011.fa --mods assets/mods.txt --isobaric tmt10plex -profile standard,docker
+nextflow run lehtiolab/nf-labelcheck --mzmls '*.mzML' --tdb swissprot_20181011.fa --mods assets/mods.txt --isobaric tmt10plex -profile standard,docker
 ```
 
 This will launch the pipeline with the `docker` configuration profile. See below for more information about profiles.
@@ -72,13 +64,13 @@ results         # Finished results (configurable, see below)
 When you run the above command, Nextflow automatically pulls the pipeline code from GitHub and stores it as a cached version. When running the pipeline after this, it will always use the cached version if available - even if the pipeline has been updated since. To make sure that you're running the latest version of the pipeline, make sure that you regularly update the cached version of the pipeline:
 
 ```bash
-nextflow pull nf-core/labelcheck
+nextflow pull lehtiolab/nf-labelcheck
 ```
 
 ### Reproducibility
 It's a good idea to specify a pipeline version when running the pipeline on your data. This ensures that a specific version of the pipeline code and software are used when you run your pipeline. If you keep using the same tag, you'll be running the same version of the pipeline, even if there have been changes to the code since.
 
-First, go to the [nf-core/labelcheck releases page](https://github.com/nf-core/labelcheck/releases) and find the latest version number - numeric only (eg. `1.3.1`). Then specify this when running the pipeline with `-r` (one hyphen) - eg. `-r 1.3.1`.
+First, go to the [lehtiolab/nf-labelcheck releases page](https://github.com/lehtiolab/nf-labelcheck/releases) and find the latest version number - numeric only (eg. `1.3.1`). Then specify this when running the pipeline with `-r` (one hyphen) - eg. `-r 1.3.1`.
 
 This version number will be logged in reports when you run the pipeline, so that you'll know what you used when you look back in the future.
 
@@ -97,10 +89,10 @@ If `-profile` is not specified at all the pipeline will be run locally and expec
   * Pulls most software from [Bioconda](https://bioconda.github.io/)
 * `docker`
   * A generic configuration profile to be used with [Docker](http://docker.com/)
-  * Pulls software from dockerhub: [`nfcore/labelcheck`](http://hub.docker.com/r/nfcore/labelcheck/)
+  * Pulls software from dockerhub: [`nf-labelcheck`](http://hub.docker.com/r/glormph/nfcore-labelcheck/)
 * `singularity`
   * A generic configuration profile to be used with [Singularity](http://singularity.lbl.gov/)
-  * Pulls software from DockerHub: [`nfcore/labelcheck`](http://hub.docker.com/r/nfcore/labelcheck/)
+  * Pulls software from DockerHub: [`nf-labelcheck`](http://hub.docker.com/r/glormph/nfcore-labelcheck/)
 * `test`
   * A profile with a complete configuration for automated testing
   * Includes links to test data so needs no other parameters
@@ -109,26 +101,27 @@ If `-profile` is not specified at all the pipeline will be run locally and expec
 Use this to specify the location of your input mzML files. For example:
 
 ```bash
---mzML 'path/to/data/sample_*.mzML'
+--mzmls 'path/to/data/sample_*.mzML'
 ```
 
 The path must be enclosed in quotes when using wildcards like `*`
 
 
 ### `--mzmldef`
-Alternative to the above --mzml this would pass a text file which contains the mzML specifications.
+Alternative to the above, you can use `--mzmldef` to pass a text file which contains the mzML specifications.
 
 ```bash
 --mzmldef /path/to/data/mzmls.txt
 ```
 
-The file itself is tab-separated without header, contains a single line per mzML file specified as follows:
-`/path/to/file<TAB>channel_name`
+This text file is tab-separated without header, contains a single line per mzML file specified as follows:
+`/path/to/file<TAB>channel_name<TAB>sample_name`
+Channel and sample name are optional.
 
 
 ### `--tdb`
 Target database. Decoy databases are created "tryptic-reverse" by the pipeline and searches are against a
-concatenated database (T-TDC)
+concatenated database (T-TDC).
 
 ```bash
 --tdb /path/to/Homo_sapiens.pep.all.fa
@@ -137,7 +130,7 @@ concatenated database (T-TDC)
 
 ### `--mods`
 Modifications file for MSGF+, contains the peptide modifications allowed by the search engine. Two examples
-can be found in the `assets` folder.
+can be found in the `assets` folder
 
 ```bash
 --mods /path/to/assets/tmtmods.txt
@@ -155,12 +148,6 @@ Isobaric multiplexing chemistry used, e.g. tmt10plex, itraq8plex
 ### Automatic resubmission
 Each step in the pipeline has a default set of requirements for number of CPUs, memory and time. For most of the steps in the pipeline, if the job exits with an error code of `143` (exceeded requested resources) it will automatically resubmit with higher requests (2 x original, then 3 x original). If it still fails after three times then the pipeline is stopped.
 
-### Custom resource requests
-Wherever process-specific requirements are set in the pipeline, the default value can be changed by creating a custom config file. See the files hosted at [`nf-core/configs`](https://github.com/nf-core/configs/tree/master/conf) for examples.
-
-If you are likely to be running `nf-core` pipelines regularly it may be a good idea to request that your custom config file is uploaded to the `nf-core/configs` git repository. Before you do this please can you test that the config file works with your pipeline of choice using the `-c` parameter (see definition below). You can then create a pull request to the `nf-core/configs` repository with the addition of your config file, associated documentation file (see examples in [`nf-core/configs/docs`](https://github.com/nf-core/configs/tree/master/docs)), and amending [`nfcore_custom.config`](https://github.com/nf-core/configs/blob/master/nfcore_custom.config) to include your custom profile.
-
-If you have any questions or issues please send us a message on [Slack](https://nf-core-invite.herokuapp.com/).
 
 ## AWS Batch specific parameters
 Running the pipeline on AWS Batch requires a couple of specific parameters to be set according to your AWS Batch configuration. Please use the `-awsbatch` profile and then specify all of the following parameters.
@@ -176,18 +163,17 @@ Please make sure to also set the `-w/--work-dir` and `--outdir` parameters to a 
 ### `--activation`
 The MS fragmentation activation method used, used by the IsobaricQuant program from OpenMS. Default is `hcd`, but `cid`, `etd` can also be used.
 
+### `--instrument`
+The MS instrument type used to be passed to the MSGF+ search engine. Defaults to `qe`, but can also be one of `[orbi, lowres, tof]`. See the [MSGF+ documentation](https://msgfplus.github.io/msgfplus/MSGFPlus.html) for more info.
+
 ### `--outdir`
 The output directory where the results will be saved.
 
 ### `--email`
 Set this parameter to your e-mail address to get a summary e-mail with details of the run sent to you when the workflow exits. If set in your user config file (`~/.nextflow/config`) then you don't need to specify this on the command line for every run.
 
-### `-name`
+### `-name` or `--name`
 Name for the pipeline run. If not specified, Nextflow will automatically generate a random mnemonic.
-
-This is used in the MultiQC report (if not default) and in the summary HTML / e-mail (always).
-
-**NB:** Single hyphen (core Nextflow option)
 
 ### `-resume`
 Specify this when restarting a pipeline. Nextflow will used cached results from any pipeline steps where the inputs are the same, continuing from where it got to previously.
@@ -248,6 +234,3 @@ Set to receive plain-text e-mails instead of HTML formatted.
 
 ### `--monochrome_logs`
 Set to disable colourful command line output and live life in monochrome.
-
-### `--multiqc_config`
-Specify a path to a custom MultiQC configuration file.
