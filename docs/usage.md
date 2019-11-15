@@ -101,20 +101,20 @@ If `-profile` is not specified at all the pipeline will be run locally and expec
 Use this to specify the location of your input mzML files. For example:
 
 ```bash
---mzML 'path/to/data/sample_*.mzML'
+--mzmls 'path/to/data/sample_*.mzML'
 ```
 
 The path must be enclosed in quotes when using wildcards like `*`
 
 
 ### `--mzmldef`
-Alternative to the above --mzml this would pass a text file which contains the mzML specifications.
+Alternative to the above, you can use `--mzmldef` to pass a text file which contains the mzML specifications.
 
 ```bash
 --mzmldef /path/to/data/mzmls.txt
 ```
 
-The file itself is tab-separated without header, contains a single line per mzML file specified as follows:
+This text file is tab-separated without header, contains a single line per mzML file specified as follows:
 `/path/to/file<TAB>channel_name<TAB>sample_name`
 Channel and sample name are optional.
 
@@ -130,7 +130,7 @@ concatenated database (T-TDC).
 
 ### `--mods`
 Modifications file for MSGF+, contains the peptide modifications allowed by the search engine. Two examples
-can be found in the `assets` folder.
+can be found in the `assets` folder
 
 ```bash
 --mods /path/to/assets/tmtmods.txt
@@ -164,7 +164,7 @@ Please make sure to also set the `-w/--work-dir` and `--outdir` parameters to a 
 The MS fragmentation activation method used, used by the IsobaricQuant program from OpenMS. Default is `hcd`, but `cid`, `etd` can also be used.
 
 ### `--instrument`
-The MS instrument type used to be passed to the MSGF+ search engine. Defaults to "qe", but can also be one of [orbi, lowres, tof]. See the [MSGF+ documentation](https://msgfplus.github.io/msgfplus/MSGFPlus.html) for more info.
+The MS instrument type used to be passed to the MSGF+ search engine. Defaults to `qe`, but can also be one of `[orbi, lowres, tof]`. See the [MSGF+ documentation](https://msgfplus.github.io/msgfplus/MSGFPlus.html) for more info.
 
 ### `--outdir`
 The output directory where the results will be saved.
@@ -172,12 +172,8 @@ The output directory where the results will be saved.
 ### `--email`
 Set this parameter to your e-mail address to get a summary e-mail with details of the run sent to you when the workflow exits. If set in your user config file (`~/.nextflow/config`) then you don't need to specify this on the command line for every run.
 
-### `-name`
+### `-name` or `--name`
 Name for the pipeline run. If not specified, Nextflow will automatically generate a random mnemonic.
-
-This is used in the MultiQC report (if not default) and in the summary HTML / e-mail (always).
-
-**NB:** Single hyphen (core Nextflow option)
 
 ### `-resume`
 Specify this when restarting a pipeline. Nextflow will used cached results from any pipeline steps where the inputs are the same, continuing from where it got to previously.
@@ -238,6 +234,3 @@ Set to receive plain-text e-mails instead of HTML formatted.
 
 ### `--monochrome_logs`
 Set to disable colourful command line output and live life in monochrome.
-
-### `--multiqc_config`
-Specify a path to a custom MultiQC configuration file.
