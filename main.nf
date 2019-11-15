@@ -306,14 +306,14 @@ process msgfPlus {
   script:
   plex = plexmap[params.isobaric]
   msgfprotocol = 0 //[tmt:4, itraq:2][plextype]
-  msgfinstrument = [velos:1, qe:3, false:0][params.instrument]
+  msgfinstrument = [orbi:1, velos:1, qe:3, lowres:0, tof:2][params.instrument]
   """
   # dynamically add isobaric type to mod file
   cat $mods > iso_mods
   echo ${plex[1]},*,opt,N-term,${plex[0]} >> iso_mods
   echo ${plex[1]},K,opt,any,${plex[0]} >> iso_mods
   # run search and create TSV, cleanup afterwards
-  msgf_plus -Xmx8G -d $db -s $x -o "${filename}.mzid" -thread 2 -mod iso_mods -tda 0 -t 10.0ppm -ti -1,2 -m 0 -inst ${msgfinstrument} -e 1 -protocol ${msgfprotocol} -ntt 2 -minLength 7 -maxLength 50 -minCharge 2 -maxCharge 6 -n 1 -addFeatures 1
+  msgf_plus -Xmx8G -d $db -s $x -o "${filename}.mzid" -thread ${task.cpus * 3} -mod iso_mods -tda 0 -t 10.0ppm -ti -1,2 -m 0 -inst ${msgfinstrument} -e 1 -protocol ${msgfprotocol} -ntt 2 -minLength 7 -maxLength 50 -minCharge 2 -maxCharge 6 -n 1 -addFeatures 1
   msgf_plus -Xmx3500M edu.ucsd.msjava.ui.MzIDToTsv -i "${filename}.mzid" -o out.mzid.tsv
   rm ${db.baseName.replaceFirst(/\.fasta/, "")}.c*
   """
