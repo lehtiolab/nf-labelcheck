@@ -4,7 +4,7 @@ from collections import OrderedDict
 import re
 
 regexes = {
-    'nf-core/labelcheck': ['v_pipeline.txt', r"(\S+)"],
+    'lehtiolab/nf-labelcheck': ['v_pipeline.txt', r"(\S+)"],
     'Nextflow': ['v_nextflow.txt', r"(\S+)"],
     'MSGF+': ['v_msgf.txt', r"([0-9\.]+)"],
     'Percolator': ['v_perco.txt', r"([0-9\.]+)"],
@@ -12,7 +12,7 @@ regexes = {
     'OpenMS': ['v_openms.txt', r"Version: ([0-9A-Z\-\.]+)"],
 }
 results = OrderedDict()
-results['nf-core/labelcheck'] = '<span style="color:#999999;\">N/A</span>'
+results['lehtiolab/nf-labelcheck'] = '<span style="color:#999999;\">N/A</span>'
 results['Nextflow'] = '<span style="color:#999999;\">N/A</span>'
 
 # Search each file using its regex
@@ -31,8 +31,8 @@ for k in results:
 # Dump to YAML
 print ('''
 id: 'software_versions'
-section_name: 'nf-core/labelcheck Software Versions'
-section_href: 'https://github.com/nf-core/labelcheck'
+section_name: 'lehtiolab/nf-labelcheck Software Versions'
+section_href: 'https://github.com/lehtiolab/nf-labelcheck'
 plot_type: 'html'
 description: 'are collected at run time from the software output.'
 data: |

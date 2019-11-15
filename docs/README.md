@@ -1,6 +1,6 @@
-# nf-core/labelcheck: Documentation
+# lehtiolab/nf-labelcheck: Documentation
 
-The nf-core/labelcheck documentation is split into the following files:
+The lehtiolab/nf-labelcheck documentation is split into the following files:
 
 1. [Installation](https://nf-co.re/usage/installation)
 2. Pipeline configuration
