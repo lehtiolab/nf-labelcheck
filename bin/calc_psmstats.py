@@ -30,28 +30,38 @@ def get_col_means(fn):
 
 
 def main():
+    mccol = False
+    outres = {'fails': 0, 'pass': 0, 'ntermfails': 0}
     if pepfield == 'Peptide': # PSM table passed
         get_col_means(fn)
     with open(fn) as fp:
         head = next(fp).strip('\n').split('\t')
+        if pepfield == 'Peptide': # PSM table passed
+            mccol = head.index('missed_cleavage')
+            outres['missed'] = {}
         pepcol = head.index(pepfield)
-        fails, ntermfails, full_psms = 0, 0, 0
         for line in fp:
             line = line.strip('\n').split('\t')
             pep = line[pepcol]
             if pep[:ml] != mod:
-                ntermfails += 1
-                fails +=1
+                outres['ntermfails'] += 1
+                outres['fails'] +=1
             # TODO this treats nterm and other fails as identical
             else:
-                full_psms += 1
+                outres['pass'] += 1
                 for lys in re.finditer('K', pep):
                     ix = lys.start() + 1
                     if not pep[ix: ix+ml] == mod:
-                        fails += 1
-                        full_psms -= 1
+                        outres['fails'] += 1
+                        outres['pass'] -= 1
                         break
-    sys.stdout.write('{} {}'.format(full_psms, fails))
+            if mccol:
+                try:
+                    outres['missed'][line[mccol]] += 1
+                except KeyError:
+                    outres['missed'][line[mccol]] = 1
+    with open('{}_stats.json'.format(fn), 'w') as fp:
+        json.dump(outres, fp)
 
 
 if __name__ == '__main__':

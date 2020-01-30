@@ -417,7 +417,7 @@ process psm2Peptides {
   set val(filename), val(channel), val(sample), file(psms) from psm_pep
   
   output:
-  set val(filename), stdout, val(channel), val(sample), file("means") into psmmeans
+  set val(filename), val(channel), val(sample), file("means"), file("${psms}_stats.json"), file("${filename}.peps_stats.json") into psmmeans
 
   script:
   col = accolmap.peptides + 1  // psm2pep adds a column
@@ -433,7 +433,6 @@ process psm2Peptides {
 
 // Let user input channel decide order of filenames
 psmmeans
-  .map { it -> [it[0], *it[1].tokenize('\t'), *it[2..-1] ] }
   .toList()
   .transpose()
   .toList()
@@ -453,7 +452,7 @@ process reportLabelCheck {
   publishDir "${params.outdir}", mode: 'copy'
 
   input:
-  set val(ordered_fns), val(filenames), val(ok_psms), val(fail_psms), val(ok_pep), val(fail_pep), val(channels), val(samples), file('means*') from psm_values
+  set val(ordered_fns), val(filenames), val(channels), val(samples), file('means*'), file('psmstats*'), file('pepstats*') from psm_values
 
   output:
   file('qc.html') into results
@@ -496,11 +495,19 @@ for ix in sort_order:
                 isomeans[ch] = [val]
 channels = sorted([x for x in isomeans.keys()], key=lambda x: x.replace('N', 'A'))
     
-# data for % labeled in input-file order
 labeldata = {
-    'psm': {'labeled': [$ok_psms[ix] for ix in sort_order], 'nonlabeled': [$fail_psms[ix] for ix in sort_order]}, 
-    'pep': {'labeled': [$ok_pep[ix] for ix in sort_order], 'nonlabeled': [$fail_pep[ix] for ix in sort_order]}, 
+    'psm': {'labeled': [], 'nonlabeled': []},
+    'pep': {'labeled': [], 'nonlabeled': []},
 }
+
+# data for % labeled in input-file order
+for ftype in ['pep', 'psm']:
+   statfns = sorted(glob('{}stats*'.format(ftype)), key=lambda x: int(x[x.index('ts')+2:]))
+   for ix in sort_order:
+       with open(statfns[ix]) as fp:
+           stat = json.load(fp)
+           labeldata[ftype]['labeled'].append(stat['pass'])
+           labeldata[ftype]['nonlabeled'].append(stat['fails'])
 
 # write to HTML template
 with open("${baseDir}/assets/report.html") as fp: 
