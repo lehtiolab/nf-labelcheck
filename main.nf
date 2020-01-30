@@ -88,6 +88,8 @@ params.instrument = 'qe' // Default instrument is Q-Exactive
 params.activation = 'hcd' // Only for isobaric quantification, not for ID with MSGF
 params.outdir = 'results'
 params.mods = "${baseDir}/assets/mods.txt"
+params.psmconflvl = 0.01
+params.pepconflvl = 0.01
 
 
 // Validate and set inputs
@@ -351,14 +353,19 @@ mzidtsvs
 process svmToTSV {
 
   input:
-  set val(filename), file('mzident????'), file('mzidtsv????'), val(channel), val(sample), file(perco) from mzperco 
+  set val(filename), file(mzids), file(tsvs), val(channel), val(sample), file(perco) from mzperco 
 
   output:
-  set val(filename), val(channel), val(sample), file('tmzidperco') into tmzidtsv_perco
+  set val(filename), val(channel), val(sample), file('target.tsv') into tmzidtsv_perco
 
   script:
   """
-  perco_to_tsv.py -p $perco 
+  mkdir outtables
+  msspsmtable percolator --perco $perco -d outtables -i ${tsvs.collect() { "'$it'" }.join(' ')} --mzids ${mzids.collect() { "'$it'" }.join(' ')}
+  msspsmtable merge -i outtables/* -o psms
+  msspsmtable conffilt -i psms -o filtpsm --confidence-better lower --confidence-lvl $params.psmconflvl --confcolpattern 'PSM q-value'
+  msspsmtable conffilt -i filtpsm -o filtpep --confidence-better lower --confidence-lvl $params.pepconflvl --confcolpattern 'peptide q-value'
+  msspsmtable split -i filtpep --splitcol \$(head -n1 psms | tr '\t' '\n' | grep -n ^TD\$ | cut -f 1 -d':')
   """
 }
 
@@ -390,12 +397,10 @@ process createPSMTable {
   outpsms = "psmtable.txt"
   """
   msspsmtable merge -i psms* -o psms.txt
-  msspsmtable conffilt -i psms.txt -o filtpsm --confidence-better lower --confidence-lvl 0.01 --confcolpattern 'PSM q-value'
-  msspsmtable conffilt -i filtpsm -o filtpep --confidence-better lower --confidence-lvl 0.01 --confcolpattern 'peptide q-value'
   # SQLite lookup needs copying to not modify the input file which would mess up a rerun with -resume
   cat lookup > $psmlookup
-  msslookup psms -i filtpep --dbfile $psmlookup 
-  msspsmtable specdata -i filtpep --dbfile $psmlookup -o prepsms.txt
+  msslookup psms -i psms.txt --dbfile $psmlookup 
+  msspsmtable specdata -i psms.txt --dbfile $psmlookup -o prepsms.txt --addmiscleav --addbioset
   msspsmtable quant -i prepsms.txt -o "${outpsms}" --dbfile $psmlookup --isobaric
   sed 's/\\#SpecFile/SpectraFile/' -i "${outpsms}"
   msspsmtable split -i "${outpsms}" --bioset
