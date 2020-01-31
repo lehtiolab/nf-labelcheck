@@ -499,6 +499,7 @@ labeldata = {
     'psm': {'labeled': [], 'nonlabeled': []},
     'pep': {'labeled': [], 'nonlabeled': []},
 }
+miscleav = []
 
 # data for % labeled in input-file order
 for ftype in ['pep', 'psm']:
@@ -508,12 +509,14 @@ for ftype in ['pep', 'psm']:
            stat = json.load(fp)
            labeldata[ftype]['labeled'].append(stat['pass'])
            labeldata[ftype]['nonlabeled'].append(stat['fails'])
+           if ftype == 'psm': 
+               miscleav.append(stat['missed'])
 
 # write to HTML template
 with open("${baseDir}/assets/report.html") as fp: 
     main = Template(fp.read())
 with open('qc.html', 'w') as fp:
-    fp.write(main.render(reportname='{{ custom_runName }}', filenames=filenames, labeldata=labeldata, channels=channels, inputchannels=sorted_channels, samples=samples, isomeans=isomeans))
+    fp.write(main.render(reportname='$custom_runName', filenames=filenames, labeldata=labeldata, channels=channels, inputchannels=sorted_channels, samples=samples, isomeans=isomeans, miscleav=miscleav))
 """
 }
 

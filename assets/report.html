@@ -25,6 +25,8 @@
     </div>
     	<h5 class="title is-5">Mean channel intensities</h5>
           <canvas id="isomeans"></canvas>
+    	<h5 class="title is-5">Missed cleavages</h5>
+          <canvas id="miscleavages"></canvas>
   </div>
 </body>
 <script>
@@ -132,12 +134,14 @@ const filenames = {{ filenames }};
 const channel_order = {{ channels }};
 const samples = {{ samples }};
 const isodata = {{ isomeans }};
+const missdata = {{ miscleav }};
 let inputchannels = {{ inputchannels }};
 
 let labdsets = {
   'psm': {percent: [], annot: []},
   'pep': {percent: [], annot: []},
   'iso': {means: [], annot: {bar: [], icon: []}},
+  'missed': {percent: [], annot: []},
 };
 
 let lab;
@@ -189,6 +193,12 @@ isotp.forEach(function(fn_iso, fnix) {
 });
 labdsets.iso.means = isomx.map((chval, ix) => dset(chval[0], isodata[chval[0]], bgcols[ix], bordercols[ix]));
 
+const mistotals = missdata.map(x => Object.values(x).reduce((x,y) => x + y));
+// Show data for 0-5 missed cleavages
+for (let i=0; i<6; i++) {
+  labdsets.missed.percent.push(dset(i, missdata.map((x, ix) => x[i] / mistotals[ix] * 100), bgcols[i], bordercols[i]));
+}
+labdsets.missed.annot = missdata.map((x, ix) => [0, `${Math.round(x[0] / mistotals[ix] * 10000)/100}%`]);
 
 
 graphheight = 25 + 20 * labeleddata.psm.labeled.length;
@@ -207,5 +217,10 @@ var isocv = document.getElementById('isomeans');
 isocv.height = graphheight / 2;
 var isoctx = isocv.getContext('2d');
 var isochart = new Chart(isoctx, horizBar(filenames, labdsets.iso.means, labdsets.iso.annot.bar, false, false, labdsets.iso.annot.icon));
+
+var misscv = document.getElementById('miscleavages');
+misscv.height = graphheight / 2;
+var missctx = misscv.getContext('2d');
+var misschart = new Chart(missctx, horizBar(filenames, labdsets.missed.percent, labdsets.missed.annot, false, false))
 </script>
 </html>
