@@ -287,7 +287,7 @@ process createTargetDecoyFasta {
 
   script:
   """
-  msslookup makedecoy -i "$tdb" -o decoy.fa --scramble tryp_rev --minlen 7
+  msslookup makedecoy -i "$tdb" -o decoy.fa --scramble tryp_rev --ignore-target-hits
   cat "$tdb" decoy.fa > db.fa
   """
 }
