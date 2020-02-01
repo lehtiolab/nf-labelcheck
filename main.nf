@@ -452,7 +452,7 @@ process reportLabelCheck {
   publishDir "${params.outdir}", mode: 'copy'
 
   input:
-  set val(ordered_fns), val(filenames), val(channels), val(samples), file('means*'), file('psmstats*'), file('pepstats*') from psm_values
+  set val(ordered_fns), val(filenames), val(channels), val(samples), file('means????'), file('psmstats????'), file('pepstats????') from psm_values
 
   output:
   file('qc.html') into results
