@@ -193,9 +193,9 @@ isotp.forEach(function(fn_iso, fnix) {
 labdsets.iso.means = isomx.map((chval, ix) => dset(chval[0], isodata[chval[0]], bgcols[ix], bordercols[ix]));
 
 const mistotals = missdata.map(x => Object.values(x).reduce((x,y) => x + y));
-// Show data for 0-5 missed cleavages
-for (let i=0; i<6; i++) {
-  labdsets.missed.percent.push(dset(i, missdata.map((x, ix) => x[i] / mistotals[ix] * 100), bgcols[i], bordercols[i]));
+// Show data for 0-2 missed cleavages
+for (let i=0; i<3; i++) {
+  labdsets.missed.percent.push(dset(i, missdata.map((x, ix) => i in x ? x[i] / mistotals[ix] * 100 : 0), bgcols[i], bordercols[i]));
 }
 labdsets.missed.annot = missdata.map((x, ix) => [0, `${Math.round(x[0] / mistotals[ix] * 10000)/100}%`]);
 

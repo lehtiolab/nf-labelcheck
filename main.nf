@@ -336,10 +336,9 @@ process percolator {
   set val(filename), val(channel), val(sample), file('perco.xml') into percolated
 
   """
-  mkdir mzids
   for mzid in ${mzids.join(' ')}; do echo \${mzid} >> metafile; done
   msgf2pin -o percoin.xml -e trypsin -P "decoy_" metafile
-  percolator -j percoin.xml -X perco.xml -N 500000 --decoy-xml-output -y
+  percolator -j percoin.xml -X perco.xml -N 500000 --decoy-xml-output
   """
 }
 
