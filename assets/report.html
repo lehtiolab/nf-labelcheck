@@ -36,9 +36,8 @@ function dset(label, data, bgcol, bordercol) {
           borderColor: bordercol, borderWidth: 1};
 }
 
-function horizBar(filenames, datasets, annotation, stepsize=false, annotate_value=false, annotate_icon=false) {
+function horizBar(filenames, datasets, annotation, xlab, stepsize=false, annotate_value=false, annotate_icon=false) {
 	
-  const xlab = annotation ? '% labeled' : 'Amount labeled';
   plot = {
     type: 'horizontalBar',
     data: {
@@ -206,21 +205,21 @@ graphheight = 25 + 20 * labeleddata.psm.labeled.length;
 var psmcv = document.getElementById('psms_labeled');
 psmcv.height = graphheight;
 var psmctx = psmcv.getContext('2d');
-var psmchart = new Chart(psmctx, horizBar(filenames, labdsets.psm.percent, labdsets.psm.annot, stepsize=5, annotate_value=true));
+var psmchart = new Chart(psmctx, horizBar(filenames, labdsets.psm.percent, labdsets.psm.annot, '% labeled', stepsize=5, annotate_value=true));
 
 var pepcv = document.getElementById('peptides_labeled');
 pepcv.height = graphheight;
 var pepctx = pepcv.getContext('2d');
-var pepchart = new Chart(pepctx, horizBar(filenames, labdsets.pep.percent, labdsets.pep.annot, stepsize=5, annotate_value=true));
+var pepchart = new Chart(pepctx, horizBar(filenames, labdsets.pep.percent, labdsets.pep.annot, '% labeled', stepsize=5, annotate_value=true));
 
 var isocv = document.getElementById('isomeans');
 isocv.height = graphheight / 2;
 var isoctx = isocv.getContext('2d');
-var isochart = new Chart(isoctx, horizBar(filenames, labdsets.iso.means, labdsets.iso.annot.bar, false, false, labdsets.iso.annot.icon));
+var isochart = new Chart(isoctx, horizBar(filenames, labdsets.iso.means, labdsets.iso.annot.bar, 'Raw intensity', false, false, labdsets.iso.annot.icon));
 
 var misscv = document.getElementById('miscleavages');
 misscv.height = graphheight / 2;
 var missctx = misscv.getContext('2d');
-var misschart = new Chart(missctx, horizBar(filenames, labdsets.missed.percent, labdsets.missed.annot, false, false))
+var misschart = new Chart(missctx, horizBar(filenames, labdsets.missed.percent, labdsets.missed.annot, '% missed cleavages', false, false))
 </script>
 </html>
