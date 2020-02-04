@@ -1,4 +1,4 @@
-FROM nfcore/base
+FROM nfcore/base:1.7
 LABEL authors="Jorrit Boekel" \
       description="Docker image containing all requirements for nf-core/labelcheck pipeline"
 
