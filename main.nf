@@ -186,7 +186,6 @@ process get_software_versions {
     msgf_plus | head -n1 > v_msgf.txt
     percolator -h |& head -n1 > v_perco.txt || true
     msspsmtable --version > v_mss.txt
-    source activate openms-2.4.0
     IsobaricAnalyzer |& grep Version > v_openms.txt || true
     scrape_software_versions.py &> software_versions_mqc.yaml
     """
@@ -230,7 +229,6 @@ process quantifySpectra {
   activationtype = [hcd:'High-energy collision-induced dissociation', cid:'Collision-induced dissociation', etd:'Electron transfer dissociation'][params.activation]
   massshift = [tmt:0.0013, itraq:0.00125][plextype]
   """
-  source activate openms-2.4.0
   IsobaricAnalyzer  -type $params.isobaric -in $infile -out \"${infile}.consensusXML\" -extraction:select_activation \"$activationtype\" -extraction:reporter_mass_shift $massshift -extraction:min_precursor_intensity 1.0 -extraction:keep_unannotated_precursor true -quantification:isotope_correction true
   """
 }
