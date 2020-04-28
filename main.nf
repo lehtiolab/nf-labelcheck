@@ -106,6 +106,7 @@ output_docs = file("$baseDir/docs/output.md")
 accolmap = [peptides: 12]
 plexmap = [tmt10plex: ["TMT6plex",  229.162932],
            tmt6plex: ["TMT6plex",  229.162932],
+           tmt16plex: ["TMTpro", 304.207146],
            itraq8plex: ["iTRAQ8plex", 304.205360],
            itraq4plex: ["iTRAQ4plex", 144.102063],
 ]
