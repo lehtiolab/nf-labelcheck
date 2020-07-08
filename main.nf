@@ -94,8 +94,8 @@ params.pepconflvl = 0.01
 
 // Validate and set inputs
 if (!params.isobaric) exit 1, "Isobaric type needs to be specified"
-params.isobaric = params.isobaric == 'tmtpro' ? 'tmt16plex': params.isobaric
-plextype = params.isobaric.replaceFirst(/[0-9]+plex/, "")
+isobaric = params.isobaric == 'tmtpro' ? 'tmt16plex': params.isobaric
+plextype = isobaric.replaceFirst(/[0-9]+plex/, "")
 mods = file(params.mods)
 if( !mods.exists() ) exit 1, "Modification file not found: ${params.mods}"
 tdb = file(params.tdb)
@@ -231,7 +231,7 @@ process quantifySpectra {
   activationtype = [hcd:'High-energy collision-induced dissociation', cid:'Collision-induced dissociation', etd:'Electron transfer dissociation'][params.activation]
   massshift = [tmt:0.0013, itraq:0.00125][plextype]
   """
-  IsobaricAnalyzer  -type $params.isobaric -in $infile -out \"${infile}.consensusXML\" -extraction:select_activation \"$activationtype\" -extraction:reporter_mass_shift $massshift -extraction:min_precursor_intensity 1.0 -extraction:keep_unannotated_precursor true -quantification:isotope_correction true
+  IsobaricAnalyzer  -type $isobaric -in $infile -out \"${infile}.consensusXML\" -extraction:select_activation \"$activationtype\" -extraction:reporter_mass_shift $massshift -extraction:min_precursor_intensity 1.0 -extraction:keep_unannotated_precursor true -quantification:isotope_correction true
   """
 }
 
@@ -306,7 +306,7 @@ process msgfPlus {
   set val(filename), file("${filename}.mzid"), file('out.mzid.tsv') into mzidtsvs
   
   script:
-  plex = plexmap[params.isobaric]
+  plex = plexmap[isobaric]
   msgfprotocol = 0 //[tmt:4, itraq:2][plextype]
   msgfinstrument = [orbi:1, velos:1, qe:3, lowres:0, tof:2][params.instrument]
   """
@@ -420,7 +420,7 @@ process psm2Peptides {
 
   script:
   col = accolmap.peptides + 1  // psm2pep adds a column
-  modweight = Math.round(plexmap[params.isobaric][1] * 1000) / 1000
+  modweight = Math.round(plexmap[isobaric][1] * 1000) / 1000
   """
   # Create peptide table from PSM table, picking best scoring unique peptides
   msspeptable psm2pep -i $psms -o peptides --scorecolpattern svm --spectracol 1 --isobquantcolpattern plex 
