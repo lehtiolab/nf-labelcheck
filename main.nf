@@ -94,6 +94,7 @@ params.pepconflvl = 0.01
 
 // Validate and set inputs
 if (!params.isobaric) exit 1, "Isobaric type needs to be specified"
+params.isobaric = params.isobaric == 'tmtpro' ? 'tmt16plex': params.isobaric
 plextype = params.isobaric.replaceFirst(/[0-9]+plex/, "")
 mods = file(params.mods)
 if( !mods.exists() ) exit 1, "Modification file not found: ${params.mods}"

@@ -141,6 +141,8 @@ Isobaric multiplexing chemistry used, e.g. tmt10plex, itraq8plex
 
 ```bash
 --isobaric tmt10plex
+# NB tmt16plex is specified as follows:
+--isobaric tmtpro
 ```
 
 
