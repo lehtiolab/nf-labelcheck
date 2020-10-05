@@ -33,6 +33,7 @@ def helpMessage() {
       --mods                        Path to MSGF+ modification file (default in assets folder)
       --activation VALUE            Specify activation protocol: hcd (DEFAULT), cid, etd for isobaric 
                                     quantification. Not necessary for other functionality.
+      --maxmissedcleavages          Max amount of missed cleavages to report (default 4)
 
     Other options:
       --outdir                      The output directory where the results will be saved
@@ -49,7 +50,7 @@ def helpMessage() {
  * SET UP CONFIGURATION VARIABLES
  */
 
-// Show help emssage
+// Show help message
 if (params.help){
     helpMessage()
     exit 0
@@ -90,6 +91,7 @@ params.outdir = 'results'
 params.mods = "${baseDir}/assets/mods.txt"
 params.psmconflvl = 0.01
 params.pepconflvl = 0.01
+params.maxmissedcleavages = 2
 
 
 // Validate and set inputs
@@ -187,42 +189,43 @@ process get_software_versions {
     echo $workflow.nextflow.version > v_nextflow.txt
     msgf_plus | head -n1 > v_msgf.txt
     percolator -h |& head -n1 > v_perco.txt || true
-    msspsmtable --version > v_mss.txt
+    msstitch --version > v_mss.txt
     IsobaricAnalyzer |& grep Version > v_openms.txt || true
     scrape_software_versions.py &> software_versions_mqc.yaml
     """
 }
 
-def or_na(it, length){
-    return it.size() > length ? it[length] : 'NA'
-}
 
-// Create channel set [file, filename, channel, sample]
+// Create mzml input: [file, filename, channels, samples]
 if (params.mzmldef) {
   Channel
     .from(file("${params.mzmldef}").readLines())
     .map { it -> it.tokenize('\t') }
-    .map { it -> [file(it[0]), file(it[0]).baseName, or_na(it, 1), or_na(it, 2)] }
-    .set { mzml_in }
+    .groupTuple(by: [0, 1])
+    .map { it -> [file(it[0]).baseName, file(it[0]), it[1], it[2], it[3]] }
+    .tap { mzml_in }
+    .map { it -> [it[2], it[3], it[4]] }
+    .into { channelsamples; input_order_sets }
 } else {
   Channel
     .fromPath(params.mzmls)
-    .map { it -> [file(it), file(it).baseName, 'NA', 'NA'] }
+    .map { it -> [file(it).baseName, file(it), file(it).baseName, [], []] }
     .set { mzml_in }
 }
 
 mzml_in
-  .tap { mzml_msgf; mzml_quant; input_order }
+  .tap { mzml_msgf; mzml_quant }
   .toList()
   .map { it.sort( {a, b -> a[1] <=> b[1]}) } // sort on sample for consistent .sh script in -resume
-  .map { it -> [it.collect() { it[0] }, it.collect() { it[1] } ] } // lists: [basefns], [mzmlfiles]
+  // Cannot transpose because when there is only one file it flattens the list
+  .map { it -> [it.collect() { it[0] }, it.collect() { it[1] }, it.collect() { it[2]} ] } // lists: [basefns], [mzmlfiles], [setnames]
   .set{ mzmlfiles_all }
 
 
 process quantifySpectra {
 
   input:
-  set file(infile), val(filename), val(channel), val(sample) from mzml_quant
+  set val(filename), file(infile), val(setname), val(channels), val(samples) from mzml_quant
 
   output:
   set val(filename), file("${infile}.consensusXML") into isobaricxml
@@ -239,14 +242,14 @@ process quantifySpectra {
 process createSpectraLookup {
 
   input:
-  set file(mzmlfiles), val(filenames) from mzmlfiles_all
+  set val(filenames), file(mzmlfiles), val(setnames) from mzmlfiles_all
 
   output:
   file 'mslookup_db.sqlite' into speclookup 
 
   script:
   """
-  msslookup spectra -i ${mzmlfiles.join(' ')} --setnames ${filenames.join(' ')}
+  msstitch storespectra --spectra ${mzmlfiles.join(' ')} --setnames ${setnames.join(' ')}
   """
 }
 
@@ -272,7 +275,7 @@ process quantLookup {
   """
   # SQLite lookup needs copying to not modify the input file which would mess up a rerun with -resume
   cat $lookup > db.sqlite
-  msslookup isoquant --dbfile db.sqlite -i ${isofns.join(' ')} --spectra ${isofns.collect{ x -> x.baseName.replaceFirst(/\.consensusXML/, "")}.join(' ')}
+  msstitch storequant --dbfile db.sqlite --isobaric ${isofns.join(' ')} --spectra ${isofns.collect{ x -> x.baseName.replaceFirst(/\.consensusXML/, "")}.join(' ')}
     """
 }
 
@@ -287,7 +290,7 @@ process createTargetDecoyFasta {
 
   script:
   """
-  msslookup makedecoy -i "$tdb" -o decoy.fa --scramble tryp_rev --ignore-target-hits
+  msstitch makedecoy -i "$tdb" -o decoy.fa --scramble tryp_rev --ignore-target-hits
   cat "$tdb" decoy.fa > db.fa
   """
 }
@@ -297,13 +300,12 @@ process msgfPlus {
   cpus = config.poolSize < 2 ? config.poolSize : 2
 
   input:
-  set file(x), val(filename), val(channel), val(sample) from mzml_msgf
+  set val(filename), file(x), val(setname), val(channels), val(samples) from mzml_msgf
   file(db) from concatdb
   file mods
 
   output:
-  set val(filename), val(channel), val(sample), file("${filename}.mzid") into mzids
-  set val(filename), file("${filename}.mzid"), file('out.mzid.tsv') into mzidtsvs
+  set val(setname), val(filename), file("${filename}.mzid"), file("${filename}.mzid.tsv") into mzids
   
   script:
   plex = plexmap[isobaric]
@@ -316,117 +318,93 @@ process msgfPlus {
   echo ${plex[1]},K,opt,any,${plex[0]} >> iso_mods
   # run search and create TSV, cleanup afterwards
   msgf_plus -Xmx8G -d $db -s $x -o "${filename}.mzid" -thread ${task.cpus * 3} -mod iso_mods -tda 0 -t 10.0ppm -ti -1,2 -m 0 -inst ${msgfinstrument} -e 1 -protocol ${msgfprotocol} -ntt 2 -minLength 7 -maxLength 50 -minCharge 2 -maxCharge 6 -n 1 -addFeatures 1
-  msgf_plus -Xmx3500M edu.ucsd.msjava.ui.MzIDToTsv -i "${filename}.mzid" -o out.mzid.tsv
+  msgf_plus -Xmx3500M edu.ucsd.msjava.ui.MzIDToTsv -i "${filename}.mzid" -o "${filename}.mzid.tsv"
   rm ${db.baseName.replaceFirst(/\.fasta/, "")}.c*
   """
 }
 
 // in case we have multiple files per set in the future (you never know), we group by set
 mzids
-  .groupTuple(by: [0,1,2])
+  .groupTuple()
   .set { mzids_2pin }
 
 
 process percolator {
 
   input:
-  set val(filename), val(channel), val(sample), file(mzids) from mzids_2pin
+  set val(setname), val(filenames), path(mzids), path(tsvs) from mzids_2pin
 
   output:
-  set val(filename), val(channel), val(sample), file('perco.xml') into percolated
+  set val(setname), path('target.tsv') into tmzidtsv_perco
 
   """
-  for mzid in ${mzids.join(' ')}; do echo \${mzid} >> metafile; done
+  for mzid in ${mzids.collect() { "'$it'" }.join(' ')}; do echo \${mzid} >> metafile; done
   msgf2pin -o percoin.xml -e trypsin -P "decoy_" metafile
   percolator -j percoin.xml -X perco.xml -N 500000 --decoy-xml-output
-  """
-}
-
-
-mzidtsvs
-  .groupTuple()
-  .join(percolated)
-  .set { mzperco }
-
-
-process svmToTSV {
-
-  input:
-  set val(filename), file(mzids), file(tsvs), val(channel), val(sample), file(perco) from mzperco 
-
-  output:
-  set val(filename), val(channel), val(sample), file('target.tsv') into tmzidtsv_perco
-
-  script:
-  """
   mkdir outtables
-  msspsmtable percolator --perco $perco -d outtables -i ${tsvs.collect() { "'$it'" }.join(' ')} --mzids ${mzids.collect() { "'$it'" }.join(' ')}
-  msspsmtable merge -i outtables/* -o psms
-  msspsmtable conffilt -i psms -o filtpsm --confidence-better lower --confidence-lvl $params.psmconflvl --confcolpattern 'PSM q-value'
-  msspsmtable conffilt -i filtpsm -o filtpep --confidence-better lower --confidence-lvl $params.pepconflvl --confcolpattern 'peptide q-value'
-  msspsmtable split -i filtpep --splitcol \$(head -n1 psms | tr '\t' '\n' | grep -n ^TD\$ | cut -f 1 -d':')
+  msstitch perco2psm --perco perco.xml -i ${tsvs.collect() { "'$it'" }.join(' ')} --mzids ${mzids.collect() { "'$it'" }.join(' ')} --filtpsm 0.01 --filtpep 0.01 -d outtables
+  msstitch concat -i outtables/* -o psms
+  msstitch split -i psms --splitcol \$(head -n1 psms | tr '\t' '\n' | grep -n ^TD\$ | cut -f 1 -d':')
   """
 }
+
 
 // Collect percolator data of target and feed into PSM table creation
 tmzidtsv_perco
   .toList()
-  .map { it.sort( {a, b -> a[0] <=> b[0]}) } // sort on filename for resumable PSM table
+  .map { it.sort( {a, b -> a[0] <=> b[0]}) } // sort on setname for resumable PSM table
   .transpose()
   .toList()
   .combine(quantlookup)
   .set { prepsm }
 
 
-
 /*
 * Step 3: Post-process peptide identification data
 */
+
 process createPSMTable {
 
   input:
-  set val(filenames), val(channels), val(samples), file('psms?'), file('lookup') from prepsm
+  set val(setnames), file('psms?'), file('lookup') from prepsm
 
   output:
-  set val(filenames), val(channels), val(samples), file({filenames.collect() { it + '.tsv' }}) into setpsmtables
+  set val(setnames), file({setnames.collect() { it + '.tsv' }}) into setpsmtables
   
 
   script:
   psmlookup = "psmlookup.sql"
   outpsms = "psmtable.txt"
   """
-  msspsmtable merge -i psms* -o psms.txt
+  msstitch concat -i psms* -o psms.txt
   # SQLite lookup needs copying to not modify the input file which would mess up a rerun with -resume
   cat lookup > $psmlookup
-  msslookup psms -i psms.txt --dbfile $psmlookup 
-  msspsmtable specdata -i psms.txt --dbfile $psmlookup -o prepsms.txt --addmiscleav --addbioset
-  msspsmtable quant -i prepsms.txt -o "${outpsms}" --dbfile $psmlookup --isobaric
+  msstitch psmtable -i psms.txt --dbfile "$psmlookup" -o "${outpsms}" --addmiscleav --addbioset --isobaric
   sed 's/\\#SpecFile/SpectraFile/' -i "${outpsms}"
-  msspsmtable split -i "${outpsms}" --bioset
+  msstitch split -i "${outpsms}" --splitcol bioset
   """
 }
 
 setpsmtables
   .transpose()
+  .join(channelsamples)
   .set { psm_pep }
 
 process psm2Peptides {
 
   input:
-  set val(filename), val(channel), val(sample), file(psms) from psm_pep
+  set val(setname), file(psms), val(channels), val(samples) from psm_pep
   
   output:
-  set val(filename), val(channel), val(sample), file("means"), file("${psms}_stats.json"), file("${filename}.peps_stats.json") into psmmeans
+  set file("${setname}_stats.json") into psmmeans
 
   script:
   col = accolmap.peptides + 1  // psm2pep adds a column
   modweight = Math.round(plexmap[isobaric][1] * 1000) / 1000
   """
   # Create peptide table from PSM table, picking best scoring unique peptides
-  msspeptable psm2pep -i $psms -o peptides --scorecolpattern svm --spectracol 1 --isobquantcolpattern plex 
-  # Move peptide sequence to first column
-  paste <( cut -f ${col} peptides) <( cut -f 1-${col-1},${col+1}-500 peptides) > "${filename}.peps"
-  echo -n \$(calc_psmstats.py $psms 'Peptide' "+${modweight}") \$(calc_psmstats.py "${filename}.peps" 'Peptide sequence' "+${modweight}") | tr ' ' '\t'
+  msstitch peptides -i $psms -o "${setname}.peps" --scorecolpattern svm --spectracol 1 --isobquantcolpattern plex --medianintensity --keep-psms-na-quant
+  calc_psmstats.py "$psms" "${setname}.peps" "${setname}" "${params.maxmissedcleavages}" "${channels.join(',')}" "${samples.join(',')}"
   """
 }
 
@@ -437,8 +415,8 @@ psmmeans
   .toList()
   .set { psmdata }
 
-input_order
-  .map { it -> it[1] } // base filenames
+input_order_sets
+  .map { it -> it[0] } // setnames
   .toList()
   .map { it -> [it] } // when merging to keep this a list
   .merge(psmdata)
@@ -451,7 +429,7 @@ process reportLabelCheck {
   publishDir "${params.outdir}", mode: 'copy'
 
   input:
-  set val(ordered_fns), val(filenames), val(channels), val(samples), file('means????'), file('psmstats????'), file('pepstats????') from psm_values
+  set val(ordered_fns), file('means????') from psm_values
 
   output:
   file('qc.html') into results
@@ -464,58 +442,21 @@ from glob import glob
 import json
 from jinja2 import Template
   
-# Data arrives, 
+# Data parsing 
 ordered_fns = [${ordered_fns.collect() { x -> "'$x'"}.join(',')}]
-filenames = [${filenames.collect() { x -> "'$x'"}.join(',')}]
-samples = [${samples.collect() { x -> "'$x'" }.join(',')}]
-inputchannels = [${channels.collect() {x -> "'$x'" }.join(',')}]
-
-# sort on user inputted file order from mzmldef
-sort_order = [filenames.index(fn) for fn in ordered_fns]
-filenames = [filenames[ix] for ix in sort_order]
-if len(inputchannels) > 0 and any([x != 'NA' for x in inputchannels]):
-    sorted_channels = [inputchannels[ix] for ix in sort_order]
-else:
-    sorted_channels = []
-if all([x == 'NA' for x in samples]):
-    samples = []
-else:
-    samples = [samples[ix] for ix in sort_order]
-
-# collect tmt mean intensities (keep input sort order for bars)
-isomeans = {}
-meanfns = sorted(glob('means*'), key=lambda x: int(x[x.index('ns')+2:]))
-for ix in sort_order:
-    with open(meanfns[ix]) as fp:
-        for ch,val in json.load(fp).items():
-            try:
-                isomeans[ch].append(val)
-            except KeyError:
-                isomeans[ch] = [val]
-channels = sorted([x for x in isomeans.keys()], key=lambda x: x.replace('N', 'A'))
-    
-labeldata = {
-    'psm': {'labeled': [], 'nonlabeled': []},
-    'pep': {'labeled': [], 'nonlabeled': []},
-}
-miscleav = []
-
-# data for % labeled in input-file order
-for ftype in ['pep', 'psm']:
-   statfns = sorted(glob('{}stats*'.format(ftype)), key=lambda x: int(x[x.index('ts')+2:]))
-   for ix in sort_order:
-       with open(statfns[ix]) as fp:
-           stat = json.load(fp)
-           labeldata[ftype]['labeled'].append(stat['pass'])
-           labeldata[ftype]['nonlabeled'].append(stat['fails'])
-           if ftype == 'psm': 
-               miscleav.append(stat['missed'])
+maxmiss = int(${params.maxmissedcleavages})
+data = []
+for meanfn in glob('means*'):
+    with open(meanfn) as fp:
+        data.append(json.load(fp))
+data = sorted(data, key=lambda x: ordered_fns.index(x['filename']))
+data = {x['filename']: x for x in data}
 
 # write to HTML template
 with open("${baseDir}/assets/report.html") as fp: 
     main = Template(fp.read())
 with open('qc.html', 'w') as fp:
-    fp.write(main.render(reportname='$custom_runName', filenames=filenames, labeldata=labeldata, channels=channels, inputchannels=sorted_channels, samples=samples, isomeans=isomeans, miscleav=miscleav))
+    fp.write(main.render(reportname='$custom_runName', filenames=ordered_fns, labeldata=data, maxmiscleav=maxmiss + 1))
 """
 }
 

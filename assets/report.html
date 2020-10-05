@@ -15,18 +15,22 @@
     <h4 class="subtitle is-4">{{ reportname }}</h4>
     <div class="columns">
       <div class="column">
-    	<h5 class="title is-5"># PSMs</h5>
+    	<h5 class="title is-5">PSM median reporter ion intensities</h5>
           <canvas id="psms_labeled" ></canvas>
+    	<h5 class="title is-5">% PSMs with missing values per reporter</h5>
+          <canvas id="psms_missingval" ></canvas>
+    	<h5 class="title is-5">% PSMs with missed cleavages per set</h5>
+          <canvas id="psmmiscleavages"></canvas>
       </div>
       <div class="column">
-    	<h5 class="title is-5"># Peptides</h5>
+    	<h5 class="title is-5">Peptide median reporter ion intensities</h5>
           <canvas id="peptides_labeled" ></canvas>
+    	<h5 class="title is-5">% Peptides with missing values per reporter</h5>
+          <canvas id="peptides_missingval" ></canvas>
+    	<h5 class="title is-5">% Peptides with missed cleavages per set</h5>
+          <canvas id="pepmiscleavages"></canvas>
       </div>
     </div>
-    	<h5 class="title is-5">Mean channel intensities</h5>
-          <canvas id="isomeans"></canvas>
-    	<h5 class="title is-5">Missed cleavages</h5>
-          <canvas id="miscleavages"></canvas>
   </div>
 </body>
 <script>
@@ -36,25 +40,25 @@ function dset(label, data, bgcol, bordercol) {
           borderColor: bordercol, borderWidth: 1};
 }
 
-function horizBar(filenames, datasets, annotation, xlab, stepsize=false, annotate_value=false, annotate_icon=false) {
+function horizBar(labels, datasets, legend, xlab, stepsize=false, annotate_value=false, percents=false, stacked=false) {
 	
   plot = {
     type: 'horizontalBar',
     data: {
-        labels: filenames,
+        labels: labels,
         datasets: datasets,
     },
     options: {
         scales: {
             xAxes: [{
 		scaleLabel: {display: true, labelString: xlab},
-                stacked: true,
+                stacked: stacked,
 		ticks: {
                   stepSize: stepsize,
 		},
             }],
             yAxes: [{
-                stacked: true,
+                stacked: stacked,
                 ticks: {
                     beginAtZero: true,
                 }
@@ -62,40 +66,26 @@ function horizBar(filenames, datasets, annotation, xlab, stepsize=false, annotat
         }
     }
   };
-
+  if (!legend) {
+    plot.options.legend = {display: false};
+  }
   plot.plugins = [ChartDataLabels];
   plot.options.plugins = {
     datalabels: {
       labels: {
-        inBar: {
-          align: 'end', formatter: function(val, context) {
+  	    value: {
+          anchor: 'start',
+          align: 'right',
+          clamp: true,
+          formatter: function(val, context) {
             var ix = context.dataIndex;
-            if (context.datasetIndex === annotation[ix][0]) {
-               return annotation[ix][1];
-             } else { return '';}
-           }
-         },
-	 icon: {
-           font: {family: 'FontAwesome', size:20,},
-           anchor: 'start',
-           align: 'right',
-           formatter: function(val, context) {
-             var ix = context.dataIndex;
- 	     if (!annotate_icon || context.datasetIndex !== 0) {
-               return '';
-	     } else { return annotate_icon[ix][1]; }
-	   }
-	 },
-	 value: {
-           anchor: 'start',
-           align: 'right',
-           formatter: function(val, context) {
-             var ix = context.dataIndex;
- 	     if (!annotate_value || context.datasetIndex !== 0) {
-               return '';
-	     } else { return `${val}%`; }
-	   }
-	 },
+   	        if (!annotate_value || context.datasetIndex !== 0) {
+              return '';
+  	        } else if (percents && annotate_value) {
+              return `${val.toFixed(1)}%`;
+  	        } else { return `${val.toFixed()}`; }
+  	      }
+  	    },
       }
     }
   }
@@ -121,105 +111,86 @@ function cyclecol(gamma) {
   ];
 }
 
-
-function cols(label, gamma) {
-  return {'labeled': cyclecol(gamma)[0], 'nonlabeled': cyclecol(gamma)[1],}[label]
-}
-
 Chart.plugins.unregister(ChartDataLabels);
 
 const labeleddata = {{ labeldata }};
 const filenames = {{ filenames }};
-const channel_order = {{ channels }};
-const samples = {{ samples }};
-const isodata = {{ isomeans }};
-const missdata = {{ miscleav }};
-let inputchannels = {{ inputchannels }};
+const miscleavs = [...Array({{ maxmiscleav }}).keys()].slice(1);
 
 let labdsets = {
-  'psm': {percent: [], annot: []},
-  'pep': {percent: [], annot: []},
-  'iso': {means: [], annot: {bar: [], icon: []}},
-  'missed': {percent: [], annot: []},
+  psms: {intensities: {data: [], backgroundColor: [], borderColor: [], borderWidth: 1},
+        missingvals: {data: [], backgroundColor: [], borderColor: [], borderWidth: 1},
+        miscleav: [],
+  },
+  peps: {intensities: {data: [], backgroundColor: [], borderColor: [], borderWidth: 1},
+        missingvals: {data: [], backgroundColor: [], borderColor: [], borderWidth: 1},
+        miscleav: [],
+  },
 };
 
-let lab;
-let nonlab;
-Object.entries(labeleddata).forEach(function(feats) {
-	  lab = feats[1].labeled.map(function(val, ix) { return Math.round(val / (val + feats[1].nonlabeled[ix]) * 10000)/100 });
-	  nonlab = feats[1].nonlabeled.map(function(val, ix) { return Math.round(val / (val + feats[1].labeled[ix]) * 10000)/100 });
-	  labdsets[feats[0]].percent.push(dset('Labeled', lab, cols('labeled', 0.2), cols('labeled', 1)));
-	  labdsets[feats[0]].percent.push(dset('Non-labeled', nonlab, cols('nonlabeled', 0.2), cols('nonlabeled', 1)));
-  labdsets[feats[0]].annot = feats[1].labeled.map(function(x, ix) {
-    let text = [];
-    if (inputchannels.length) {text.push(inputchannels[ix]); }
-    if (samples.length) {text.push(samples[ix]); }
-    text.push(`Total: ${x}`);
-    return [0, text.join(', ')];
-  });
+const ftypes = ['psms', 'peps'];
+filenames.forEach(function(fn, ix) {
+  const bgcol = cyclecol(0.2)[ix]
+  const bordercol = cyclecol(1)[ix]
+  labeleddata[fn].channels.forEach(function(ch) {
+    for (const ftype of ftypes) {
+      labdsets[ftype].intensities.data.push(labeleddata[fn][ftype][ch].median);
+      labdsets[ftype].intensities.backgroundColor.push(bgcol);
+      labdsets[ftype].intensities.borderColor.push(bordercol);
+      labdsets[ftype].missingvals.data.push(labeleddata[fn][ftype][ch].missingvals);
+      labdsets[ftype].missingvals.backgroundColor.push(bgcol);
+      labdsets[ftype].missingvals.borderColor.push(bordercol);
+    }
+  })
 });
+labdsets.annot = filenames.map(fn => labeleddata[fn].channels.map(ch => `${fn} - ${ch}`)).flat();
 
-const bgcols = cyclecol(0.2);
-const bordercols = cyclecol(1);
+miscleavs.forEach(function(mcnum) {
+  const bgcol = cyclecol(0.2)[mcnum];
+  const bgcolbor = cyclecol(1)[mcnum];
+  ftypes.forEach(function(ftype) {
+    labdsets[ftype].miscleav.push({
+      label: `${mcnum} missed cleavage(s)`,
+      data: filenames.map(fn => labeleddata[fn][ftype].miscleav[mcnum]),
+      backgroundColor: bgcol,
+      borderColor: bgcolbor,
+      borderWidth: 1
+    })
+  })
+})
 
-// Create isobaric data matrix, transpose and calculate the max values in it per file
-// Add text labels
-let fnch;
-let fnsam;
-let isomx = Object.entries(isodata).sort((x, y )=> x[0].replace('N', 'A') > y[0].replace('N', 'A'))
-if (inputchannels.length) {
-	  fnch = Object.fromEntries(filenames.map((fn, ix) => [fn, inputchannels[ix]]));
-}
-if (inputchannels.length && samples.length) {
-	  fnsam = Object.fromEntries(filenames.map((fn, ix) => [fn, samples[ix]]));
-}
-
-//transpose to array [[channel-values-of-first-file], [...second-file], ...]
-const isotp = isomx[0][1].map((col, ix) => isomx.map(row => row[1][ix]));
-isotp.forEach(function(fn_iso, fnix) {
-	  const chmax_ix = fn_iso.indexOf(Math.max(...fn_iso));
-	  const fn = filenames[fnix];
-	  let text = [];
-	  if (samples.length) {text.push(`Sample: ${fnsam[fn]}`); }
-	  if (inputchannels.length) {text.push(`Channel: ${fnch[fn]}`); }
-	  text.push(`Max. intensity in: ${isomx[chmax_ix][0]}`);
-	  labdsets.iso.annot.bar.push([chmax_ix, text.join(', ')]);
-	  if (inputchannels.length) {
-		      labdsets.iso.annot.icon.push([inputchannels.length - 1, isomx[chmax_ix][0] === inputchannels[fnix] ? '\uf00c': '\uf00d']);
-		    } else {
-			        labdsets.iso.annot.icon = false;
-			      }
-});
-labdsets.iso.means = isomx.map((chval, ix) => dset(chval[0], isodata[chval[0]], bgcols[ix], bordercols[ix]));
-
-const mistotals = missdata.map(x => Object.values(x).reduce((x,y) => x + y));
-// Show data for 0-2 missed cleavages
-for (let i=0; i<3; i++) {
-  labdsets.missed.percent.push(dset(i, missdata.map((x, ix) => i in x ? x[i] / mistotals[ix] * 100 : 0), bgcols[i], bordercols[i]));
-}
-labdsets.missed.annot = missdata.map((x, ix) => [0, `${Math.round(x[0] / mistotals[ix] * 10000)/100}%`]);
-
-
-graphheight = 25 + 20 * labeleddata.psm.labeled.length;
+graphheight = 25 + 12 * filenames.map(fn => labeleddata[fn].channels).flat().length;
+setgraphheight = 25 + 12 * filenames.length;
 
 var psmcv = document.getElementById('psms_labeled');
 psmcv.height = graphheight;
 var psmctx = psmcv.getContext('2d');
-var psmchart = new Chart(psmctx, horizBar(filenames, labdsets.psm.percent, labdsets.psm.annot, '% labeled', stepsize=5, annotate_value=true));
+var psmchart = new Chart(psmctx, horizBar(labdsets.annot, [labdsets.psms.intensities], false, 'intensity', stepsize=false, annotate_value=true));
+
+let psmnacv = document.getElementById('psms_missingval');
+psmnacv.height = graphheight;
+let psmnactx = psmnacv.getContext('2d');
+let psmnachart = new Chart(psmnactx, horizBar(labdsets.annot, [labdsets.psms.missingvals], false, '% missing values', stepsize=false, annotate_value=true, percents=true));
 
 var pepcv = document.getElementById('peptides_labeled');
 pepcv.height = graphheight;
 var pepctx = pepcv.getContext('2d');
-var pepchart = new Chart(pepctx, horizBar(filenames, labdsets.pep.percent, labdsets.pep.annot, '% labeled', stepsize=5, annotate_value=true));
+var pepchart = new Chart(pepctx, horizBar(labdsets.annot, [labdsets.peps.intensities], false, 'intensity', stepsize=false, annotate_value=true));
 
-var isocv = document.getElementById('isomeans');
-isocv.height = graphheight / 2;
-var isoctx = isocv.getContext('2d');
-var isochart = new Chart(isoctx, horizBar(filenames, labdsets.iso.means, labdsets.iso.annot.bar, 'Raw intensity', false, false, labdsets.iso.annot.icon));
+let pepnacv = document.getElementById('peptides_missingval');
+pepnacv.height = graphheight;
+let pepnactx = pepnacv.getContext('2d');
+let pepnachart = new Chart(pepnactx, horizBar(labdsets.annot, [labdsets.peps.missingvals], false, '% missing values', stepsize=false, annotate_value=true, percents=true));
 
-var misscv = document.getElementById('miscleavages');
-misscv.height = graphheight / 2;
-var missctx = misscv.getContext('2d');
-var misschart = new Chart(missctx, horizBar(filenames, labdsets.missed.percent, labdsets.missed.annot, '% missed cleavages', false, false))
+let psmmisscv = document.getElementById('psmmiscleavages');
+psmmisscv.height = setgraphheight;
+const psmmissctx = psmmisscv.getContext('2d');
+const psmmisschart = new Chart(psmmissctx, horizBar(filenames, labdsets.psms.miscleav, true, '% missed cleavages', false, annotate_value=true, percents=true, stacked=true));
+
+let pepmisscv = document.getElementById('pepmiscleavages');
+pepmisscv.height = setgraphheight;
+const pepmissctx = pepmisscv.getContext('2d');
+const pepmisschart = new Chart(pepmissctx, horizBar(filenames, labdsets.peps.miscleav, true, '% missed cleavages', false, annotate_value=true, percents=true, stacked=true));
+
 </script>
 </html>

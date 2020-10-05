@@ -2,65 +2,69 @@
 
 import sys
 import re
-from statistics import mean
+from statistics import median
 import json
 
-fn = sys.argv[1]
-pepfield = sys.argv[2]
-mod = sys.argv[3]
-ml = len(mod)
+psmfn = sys.argv[1]
+pepfn = sys.argv[2]
+setname = sys.argv[3]
+maxmis = int(sys.argv[4])
+channels = sys.argv[5]
+samples = sys.argv[6]
 
 
-def get_col_means(fn):
+def get_col_medians(fn):
     with open(fn) as fp:
         head = next(fp).strip('\n').split('\t')
+        mccol = head.index('missed_cleavage')
+        # Isobaric intensities
         plexcol = [x for x in filter(lambda y: 'plex' in y[1], [field for field in enumerate(head)])] 
-        data = {x[1]: [] for x in plexcol} 
+        data = {x[1]: {'intensities': [], 'missingvals': 0} for x in plexcol} 
+        miscleav = {x: 0 for x in range(0, maxmis + 1)}
         for line in fp:
             line = line.strip('\n').split('\t')
+            is_missed = False
+            num_mis = int(line[mccol])
+            if num_mis <= maxmis:
+               # is_missed = True
+                miscleav[int(line[mccol])] += 1
             for col in plexcol:
+                val = line[col[0]]
                 try:
-                    data[col[1]].append(float(line[col[0]]))
+                    intensity = float(val)
                 except ValueError:
-                    pass  # caused by NA
+                    data[col[1]]['missingvals'] += 1
+               #     if is_missed:
+               #         data[col[1]]['miscleav_int'][num_mis].append(0)
+                else:
+                    if intensity == 0:
+                        data[col[1]]['missingvals'] += 1
+                    else:
+                        data[col[1]]['intensities'].append(intensity)
+               #     if is_missed:
+               #         data[col[1]]['miscleav_int'][num_mis].append(intensity)
     for col in plexcol:
-        data[re.sub('[a-z0-9]+plex_', '', col[1])] = mean(data.pop(col[1]))
-    with open('means', 'w') as fp:
-        json.dump(data, fp)
+        vals = data.pop(col[1])
+        medianints = median(vals['intensities'])
+        ch = re.sub('[a-z0-9]+plex_', '', col[1])
+        data[ch] = {'median': medianints, 'missingvals': float(vals['missingvals']) / len(vals['intensities']) * 100}
+#        for mcn, ints in vals['miscleav_int'].items():
+#            try:
+#                medint = median(ints)
+#            except ValueError:
+#                medint = 0
+#            data[ch]['miscleav'][mcn] = medint / medianints
+    data['miscleav'] = {num: amount / sum(miscleav.values()) * 100 for num, amount in miscleav.items()}
+    return data
 
 
 def main():
     mccol = False
-    outres = {'fails': 0, 'pass': 0, 'ntermfails': 0}
-    if pepfield == 'Peptide': # PSM table passed
-        get_col_means(fn)
-    with open(fn) as fp:
+    outres = {'filename': setname, 'samples': samples.split(','), 'channels': channels.split(','),
+            'psms': get_col_medians(psmfn), 'peps': get_col_medians(pepfn)}
+    with open(psmfn) as fp:
         head = next(fp).strip('\n').split('\t')
-        if pepfield == 'Peptide': # PSM table passed
-            mccol = head.index('missed_cleavage')
-            outres['missed'] = {}
-        pepcol = head.index(pepfield)
-        for line in fp:
-            line = line.strip('\n').split('\t')
-            pep = line[pepcol]
-            if pep[:ml] != mod:
-                outres['ntermfails'] += 1
-                outres['fails'] +=1
-            # TODO this treats nterm and other fails as identical
-            else:
-                outres['pass'] += 1
-                for lys in re.finditer('K', pep):
-                    ix = lys.start() + 1
-                    if not pep[ix: ix+ml] == mod:
-                        outres['fails'] += 1
-                        outres['pass'] -= 1
-                        break
-            if mccol:
-                try:
-                    outres['missed'][line[mccol]] += 1
-                except KeyError:
-                    outres['missed'][line[mccol]] = 1
-    with open('{}_stats.json'.format(fn), 'w') as fp:
+    with open('{}_stats.json'.format(setname), 'w') as fp:
         json.dump(outres, fp)
 
 
