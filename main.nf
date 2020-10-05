@@ -203,19 +203,20 @@ if (params.mzmldef) {
   Channel
     .from(file("${params.mzmldef}").readLines())
     .map { it -> it.tokenize('\t') }
-    .groupTuple(by: [0, 1])
-    .map { it -> [file(it[0]).baseName, file(it[0]), it[1], it[2], it[3]] }
     .tap { mzml_in }
-    .map { it -> [it[2], it[3], it[4]] }
+    .map { it -> [it[1], it[2], it[3]] }
+    .groupTuple()
     .into { channelsamples; input_order_sets }
 } else {
   Channel
     .fromPath(params.mzmls)
-    .map { it -> [file(it).baseName, file(it), file(it).baseName, [], []] }
+    .map { it -> [it, file(it).baseName, 'NA', 'NA'] }
     .set { mzml_in }
 }
 
 mzml_in
+  .groupTuple(by: [0, 1]) // filename, setname
+  .map { it -> [file(it[0]).baseName, file(it[0]), it[1]] }
   .tap { mzml_msgf; mzml_quant }
   .toList()
   .map { it.sort( {a, b -> a[1] <=> b[1]}) } // sort on sample for consistent .sh script in -resume
@@ -227,7 +228,7 @@ mzml_in
 process quantifySpectra {
 
   input:
-  set val(filename), file(infile), val(setname), val(channels), val(samples) from mzml_quant
+  set val(filename), file(infile), val(setname) from mzml_quant
 
   output:
   set val(filename), file("${infile}.consensusXML") into isobaricxml
@@ -302,7 +303,7 @@ process msgfPlus {
   cpus = config.poolSize < 2 ? config.poolSize : 2
 
   input:
-  set val(filename), file(x), val(setname), val(channels), val(samples) from mzml_msgf
+  set val(filename), file(x), val(setname) from mzml_msgf
   file(db) from concatdb
   file mods
 
