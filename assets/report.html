@@ -49,21 +49,19 @@ function horizBar(labels, datasets, legend, xlab, stepsize=false, annotate_value
         datasets: datasets,
     },
     options: {
-        scales: {
-            xAxes: [{
-		scaleLabel: {display: true, labelString: xlab},
-                stacked: stacked,
-		ticks: {
-                  stepSize: stepsize,
-		},
-            }],
-            yAxes: [{
-                stacked: stacked,
-                ticks: {
-                    beginAtZero: true,
-                }
-            }]
-        }
+      scales: {
+          xAxes: [{
+            scaleLabel: {display: true, labelString: xlab}, 
+            stacked: stacked,
+            ticks: {
+              stepSize: stepsize,
+              beginAtZero: true,
+            },
+          }],
+        yAxes: [{
+          stacked: stacked,
+        }]
+      }
     }
   };
   if (!legend) {
@@ -159,8 +157,8 @@ miscleavs.forEach(function(mcnum) {
   })
 })
 
-graphheight = 25 + 12 * filenames.map(fn => labeleddata[fn].channels).flat().length;
-setgraphheight = 25 + 12 * filenames.length;
+graphheight = 40 + 12 * filenames.map(fn => labeleddata[fn].channels).flat().length;
+setgraphheight = 40 + 12 * filenames.length;
 
 var psmcv = document.getElementById('psms_labeled');
 psmcv.height = graphheight;
