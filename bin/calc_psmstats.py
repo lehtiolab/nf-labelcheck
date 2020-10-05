@@ -21,8 +21,10 @@ def get_col_medians(fn):
         plexcol = [x for x in filter(lambda y: 'plex' in y[1], [field for field in enumerate(head)])] 
         data = {x[1]: {'intensities': [], 'missingvals': 0} for x in plexcol} 
         miscleav = {x: 0 for x in range(0, maxmis + 1)}
+        numpsms = 0
         for line in fp:
             line = line.strip('\n').split('\t')
+            numpsms += 1
             is_missed = False
             num_mis = int(line[mccol])
             if num_mis <= maxmis:
@@ -47,14 +49,14 @@ def get_col_medians(fn):
         vals = data.pop(col[1])
         medianints = median(vals['intensities'])
         ch = re.sub('[a-z0-9]+plex_', '', col[1])
-        data[ch] = {'median': medianints, 'missingvals': float(vals['missingvals']) / len(vals['intensities']) * 100}
+        data[ch] = {'median': medianints, 'missingvals': float(vals['missingvals']) / numpsms * 100}
 #        for mcn, ints in vals['miscleav_int'].items():
 #            try:
 #                medint = median(ints)
 #            except ValueError:
 #                medint = 0
 #            data[ch]['miscleav'][mcn] = medint / medianints
-    data['miscleav'] = {num: amount / sum(miscleav.values()) * 100 for num, amount in miscleav.items()}
+    data['miscleav'] = {num: amount / numpsms * 100 for num, amount in miscleav.items()}
     return data
 
 

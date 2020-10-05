@@ -103,6 +103,8 @@ if( !mods.exists() ) exit 1, "Modification file not found: ${params.mods}"
 tdb = file(params.tdb)
 if( !tdb.exists() ) exit 1, "Target fasta DB file not found: ${params.tdb}"
 
+maxmiscleav = params.maxmissedcleavages > -1 ? params.maxmissedcleavages : 1000
+
 output_docs = file("$baseDir/docs/output.md")
 
 // set constant variables
@@ -317,7 +319,7 @@ process msgfPlus {
   echo ${plex[1]},*,opt,N-term,${plex[0]} >> iso_mods
   echo ${plex[1]},K,opt,any,${plex[0]} >> iso_mods
   # run search and create TSV, cleanup afterwards
-  msgf_plus -Xmx8G -d $db -s $x -o "${filename}.mzid" -thread ${task.cpus * 3} -mod iso_mods -tda 0 -t 10.0ppm -ti -1,2 -m 0 -inst ${msgfinstrument} -e 1 -protocol ${msgfprotocol} -ntt 2 -minLength 7 -maxLength 50 -minCharge 2 -maxCharge 6 -n 1 -addFeatures 1
+  msgf_plus -Xmx8G -d $db -s $x -o "${filename}.mzid" -thread ${task.cpus * 3} -mod iso_mods -tda 0 -t 10.0ppm -ti -1,2 -m 0 -inst ${msgfinstrument} -e 1 -protocol ${msgfprotocol} -ntt 2 -minLength 7 -maxLength 50 -minCharge 2 -maxCharge 6 -n 1 -addFeatures 1 -maxMissedCleavages ${params.maxmissedcleavages}
   msgf_plus -Xmx3500M edu.ucsd.msjava.ui.MzIDToTsv -i "${filename}.mzid" -o "${filename}.mzid.tsv"
   rm ${db.baseName.replaceFirst(/\.fasta/, "")}.c*
   """
@@ -404,7 +406,7 @@ process psm2Peptides {
   """
   # Create peptide table from PSM table, picking best scoring unique peptides
   msstitch peptides -i $psms -o "${setname}.peps" --scorecolpattern svm --spectracol 1 --isobquantcolpattern plex --medianintensity --keep-psms-na-quant
-  calc_psmstats.py "$psms" "${setname}.peps" "${setname}" "${params.maxmissedcleavages}" "${channels.join(',')}" "${samples.join(',')}"
+  calc_psmstats.py "$psms" "${setname}.peps" "${setname}" "${maxmiscleav}" "${channels.join(',')}" "${samples.join(',')}"
   """
 }
 
@@ -444,7 +446,7 @@ from jinja2 import Template
   
 # Data parsing 
 ordered_fns = [${ordered_fns.collect() { x -> "'$x'"}.join(',')}]
-maxmiss = int(${params.maxmissedcleavages})
+maxmiss = int(${maxmiscleav})
 data = []
 for meanfn in glob('means*'):
     with open(meanfn) as fp:
