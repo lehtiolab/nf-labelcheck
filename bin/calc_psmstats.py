@@ -5,15 +5,8 @@ import re
 from statistics import median
 import json
 
-psmfn = sys.argv[1]
-pepfn = sys.argv[2]
-setname = sys.argv[3]
-maxmis = int(sys.argv[4])
-channels = sys.argv[5]
-samples = sys.argv[6]
 
-
-def get_col_medians(fn):
+def get_col_medians(fn, maxmis):
     with open(fn) as fp:
         head = next(fp).strip('\n').split('\t')
         mccol = head.index('missed_cleavage')
@@ -47,7 +40,11 @@ def get_col_medians(fn):
                #         data[col[1]]['miscleav_int'][num_mis].append(intensity)
     for col in plexcol:
         vals = data.pop(col[1])
-        medianints = median(vals['intensities'])
+        try:
+            medianints = median(vals['intensities'])
+        except ValueError:
+            # E.g. empty channel
+            medianints = 0
         ch = re.sub('[a-z0-9]+plex_', '', col[1])
         data[ch] = {'median': medianints, 'missingvals': float(vals['missingvals']) / numpsms * 100}
 #        for mcn, ints in vals['miscleav_int'].items():
@@ -61,9 +58,21 @@ def get_col_medians(fn):
 
 
 def main():
-    mccol = False
-    outres = {'filename': setname, 'samples': samples.split(','), 'channels': channels.split(','),
-            'psms': get_col_medians(psmfn), 'peps': get_col_medians(pepfn)}
+    psmfn = sys.argv[1]
+    pepfn = sys.argv[2]
+    setname = sys.argv[3]
+    maxmis = int(sys.argv[4])
+    channels = sys.argv[5]
+    samples = sys.argv[6]
+
+    if channels == '':
+        with open(psmfn) as fp:
+            head = next(fp).strip('\n').split('\t')
+            channels = [re.sub('[a-z0-9]+plex_', '', x) for x in head if 'plex' in x]
+    else:
+        channels = channels.split(',')
+    outres = {'filename': setname, 'samples': samples.split(','), 'channels': channels,
+            'psms': get_col_medians(psmfn, maxmis), 'peps': get_col_medians(pepfn, maxmis)}
     with open(psmfn) as fp:
         head = next(fp).strip('\n').split('\t')
     with open('{}_stats.json'.format(setname), 'w') as fp:

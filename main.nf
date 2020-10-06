@@ -211,7 +211,9 @@ if (params.mzmldef) {
   Channel
     .fromPath(params.mzmls)
     .map { it -> [it, file(it).baseName, 'NA', 'NA'] }
-    .set { mzml_in }
+    .tap { mzml_in }
+    .map { it -> [it[1], it[2], it[3]] }
+    .into { channelsamples; input_order_sets }
 }
 
 mzml_in
