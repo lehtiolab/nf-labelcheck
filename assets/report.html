@@ -141,7 +141,15 @@ filenames.forEach(function(fn, ix) {
     }
   })
 });
-labdsets.annot = filenames.map(fn => labeleddata[fn].channels.map(ch => `${fn} - ${ch}`)).flat();
+labdsets.annot = filenames.map(fn => labeleddata[fn].channels.map((ch, ix) => {
+  let label;
+  if (labeleddata[fn].samples.length) {
+    label = `${fn} - ${ch} - ${labeleddata[fn].samples[ix]}`;
+  } else {
+    label = `${fn} - ${ch}`;
+  }
+  return label
+})).flat();
 
 miscleavs.forEach(function(mcnum) {
   const bgcol = cyclecol(0.2)[mcnum];

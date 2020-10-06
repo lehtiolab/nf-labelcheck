@@ -71,7 +71,9 @@ def main():
             channels = [re.sub('[a-z0-9]+plex_', '', x) for x in head if 'plex' in x]
     else:
         channels = channels.split(',')
-    outres = {'filename': setname, 'samples': samples.split(','), 'channels': channels,
+    samples = [] if samples == '' else samples.split(',')
+
+    outres = {'filename': setname, 'samples': samples, 'channels': channels,
             'psms': get_col_medians(psmfn, maxmis), 'peps': get_col_medians(pepfn, maxmis)}
     with open(psmfn) as fp:
         head = next(fp).strip('\n').split('\t')
