@@ -46,7 +46,7 @@ NXF_OPTS='-Xms1g -Xmx4g'
 The typical command for running the pipeline is as follows:
 
 ```bash
-nextflow run lehtiolab/nf-labelcheck --mzmls '*.mzML' --tdb swissprot_20181011.fa --mods assets/mods.txt --isobaric tmt10plex -profile standard,docker
+nextflow run lehtiolab/nf-labelcheck --mzmldef 'mzmls.txt' --tdb swissprot_20181011.fa --mods assets/mods.txt --isobaric tmt10plex -profile standard,docker
 ```
 
 This will launch the pipeline with the `docker` configuration profile. See below for more information about profiles.
@@ -97,26 +97,36 @@ If `-profile` is not specified at all the pipeline will be run locally and expec
   * A profile with a complete configuration for automated testing
   * Includes links to test data so needs no other parameters
 
-### `--mzmls`
-Use this to specify the location of your input mzML files. For example:
-
-```bash
---mzmls 'path/to/data/sample_*.mzML'
-```
-
-The path must be enclosed in quotes when using wildcards like `*`
-
-
 ### `--mzmldef`
-Alternative to the above, you can use `--mzmldef` to pass a text file which contains the mzML specifications.
+Specify input spectra, pass a text file which contains the mzML specifications
 
 ```bash
 --mzmldef /path/to/data/mzmls.txt
 ```
 
-This text file is tab-separated without header, contains a single line per mzML file specified as follows:
-`/path/to/file<TAB>channel_name<TAB>sample_name`
-Channel and sample name are optional.
+This text file is tab-separated without header, contains a single line per mzML file/channel combination, specified as follows:
+
+```/path/to/file<TAB>setname<TAB>channel_name<TAB>sample_name```
+
+Channel and sample name are optional, tab is not. E.g.:
+
+```
+/path/to/mzmls/20190715_TMT10_setA_LC.mzML   setA    126     sample1
+/path/to/mzmls/20190715_TMT10_setA_LC.mzML   setA    127N    sample2
+/path/to/mzmls/20190715_TMT10_setA_LC.mzML   setA    127C    sample3
+```
+This will work for both pooled and single-channel runs, but if you have the luxury to run single channel MS time,
+you may want to use v1.2 of this pipeline which gives a nicer report, including more precise missed cleavage data.
+
+
+### `--mzmls`
+Alternative to `--mzmldef`, use this to specify the location of your input mzML files. For example:
+
+```bash
+--mzmls 'path/to/data/sample_*.mzML'
+```
+
+The path must be enclosed in quotes when using wildcards like `*`. The report will be less nice since you cannot pass channels and samples.
 
 
 ### `--tdb`
@@ -127,14 +137,6 @@ concatenated database (T-TDC).
 --tdb /path/to/Homo_sapiens.pep.all.fa
 ```
 
-
-### `--mods`
-Modifications file for MSGF+, contains the peptide modifications allowed by the search engine. Two examples
-can be found in the `assets` folder
-
-```bash
---mods /path/to/assets/tmtmods.txt
-```
 
 ### `--isobaric`
 Isobaric multiplexing chemistry used, e.g. tmt10plex, itraq8plex
@@ -166,7 +168,19 @@ Please make sure to also set the `-w/--work-dir` and `--outdir` parameters to a 
 The MS fragmentation activation method used, used by the IsobaricQuant program from OpenMS. Default is `hcd`, but `cid`, `etd` can also be used.
 
 ### `--instrument`
-The MS instrument type used to be passed to the MSGF+ search engine. Defaults to `qe`, but can also be one of `[orbi, lowres, tof]`. See the [MSGF+ documentation](https://msgfplus.github.io/msgfplus/MSGFPlus.html) for more info.
+The MS instrument type used to be passed to the MSGF+ search engine. Defaults to `qe`, but can also be one of `[velos, lowres, tof]`. See the [MSGF+ documentation](https://msgfplus.github.io/msgfplus/MSGFPlus.html) for more info.
+
+### `--mods`
+Modifications file for MSGF+, contains the peptide modifications allowed by the search engine. Two examples
+can be found in the `assets` folder. These files are optional (default is Oxidation, Carbamidomethylation), and do 
+not need to contain the isobaric mods which are specified on the command line.
+
+```bash
+--mods /path/to/assets/tmtmods.txt
+```
+
+### `--maxmissedcleavages`
+The maximum amount of allowed missed cleavages in the report and search. Default is 2.
 
 ### `--outdir`
 The output directory where the results will be saved.
