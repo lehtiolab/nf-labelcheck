@@ -24,6 +24,7 @@ def helpMessage() {
       --mzmls                       Path to mzML files
       --mzmldef                     Alternative to --mzml: path to file containing list of mzMLs 
                                     tab separated: file-tab-channel path
+      --sampletable                 Tab-separated file detailing the samples in the mzMLs per channel
       --tdb                         Path to target FASTA protein database
       --isobaric VALUE              In case of isobaric, specify: tmt10plex, tmt6plex, itraq8plex, itraq4plex
       -profile                      Configuration profile to use. Can use multiple (comma separated)
@@ -84,14 +85,15 @@ params.email = false
 params.plaintext_email = false
 
 params.mzmldef = false
+params.sampletable = false
 params.isobaric = false
-params.instrument = 'qe' // Default instrument is Q-Exactive
 params.activation = 'hcd' // Only for isobaric quantification, not for ID with MSGF
 params.outdir = 'results'
 params.mods = "${baseDir}/assets/mods.txt"
 params.psmconflvl = 0.01
 params.pepconflvl = 0.01
 params.maxmissedcleavages = 2
+
 
 
 // Validate and set inputs
@@ -123,9 +125,9 @@ if(workflow.revision) summary['Pipeline Release'] = workflow.revision
 summary['Run Name']         = custom_runName ?: workflow.runName
 
 summary['mzMLs or input definition']        = params.mzmldef ? params.mzmldef : params.mzmls
+summary['Sample table'] = params.sampletable
 summary['Target DB']    = params.tdb
 summary['Modifications'] = params.mods
-summary['Instrument'] = params.instrument
 summary['Isobaric tags'] = params.isobaric
 summary['Isobaric activation'] = params.activation
 
@@ -199,38 +201,44 @@ process get_software_versions {
 
 
 // Create mzml input: [file, filename, channels, samples]
+Channel
+  .from(file(params.sampletable).readLines())
+    .map { it -> it.tokenize('\t') }
+    // make sample table interop with ddamsproteomics
+    // if any more info than set/channel/sample is entered, remove it
+    .map { it -> [it[1], it[0], it[2]] }
+    .groupTuple()
+    .into { channelsamples; input_order_sets }
+
 if (params.mzmldef) {
   Channel
     .from(file("${params.mzmldef}").readLines())
     .map { it -> it.tokenize('\t') }
-    .tap { mzml_in }
-    .map { it -> [it[1], it[2], it[3]] }
-    .groupTuple()
-    .into { channelsamples; input_order_sets }
+    // Interop with ddamsproteomics: strip other than file/instrument/set
+    .map { it -> [it[0], it[1], it[2]] }
+    .set{ mzml_in }
 } else {
   Channel
     .fromPath(params.mzmls)
-    .map { it -> [it, file(it).baseName, 'NA', 'NA'] }
-    .tap { mzml_in }
-    .map { it -> [it[1], it[2], it[3]] }
-    .into { channelsamples; input_order_sets }
+    .map { it -> [it, file(it).baseName] }
+    .set { mzml_in }
 }
 
 mzml_in
-  .groupTuple(by: [0, 1]) // filename, setname
-  .map { it -> [file(it[0]).baseName, file(it[0]), it[1]] }
+  //.groupTuple(by: [0, 2]) // filename, setname
+  .map { it -> [file(it[0]).baseName, file(it[0]), it[1], it[2]] }
   .tap { mzml_msgf; mzml_quant }
   .toList()
   .map { it.sort( {a, b -> a[1] <=> b[1]}) } // sort on sample for consistent .sh script in -resume
   // Cannot transpose because when there is only one file it flattens the list
-  .map { it -> [it.collect() { it[0] }, it.collect() { it[1] }, it.collect() { it[2]} ] } // lists: [basefns], [mzmlfiles], [setnames]
+  .map { it -> [it.collect() { it[0] }, it.collect() { it[1] }, it.collect() { it[3]} ] } // lists: [basefns], [mzmlfiles], [setnames]
   .set{ mzmlfiles_all }
 
 
 process quantifySpectra {
 
   input:
-  set val(filename), file(infile), val(setname) from mzml_quant
+  set val(filename), file(infile), val(instrument), val(setname) from mzml_quant
 
   output:
   set val(filename), file("${infile}.consensusXML") into isobaricxml
@@ -305,7 +313,7 @@ process msgfPlus {
   cpus = config.poolSize < 2 ? config.poolSize : 2
 
   input:
-  set val(filename), file(x), val(setname) from mzml_msgf
+  set val(filename), file(x), val(instrument), val(setname) from mzml_msgf
   file(db) from concatdb
   file mods
 
@@ -315,7 +323,7 @@ process msgfPlus {
   script:
   plex = plexmap[isobaric]
   msgfprotocol = 0 //[tmt:4, itraq:2][plextype]
-  msgfinstrument = [orbi:1, velos:1, qe:3, lowres:0, tof:2][params.instrument]
+  msgfinstrument = [orbi:1, velos:1, qe:3, lowres:0, tof:2][instrument]
   """
   # dynamically add isobaric type to mod file
   cat $mods > iso_mods

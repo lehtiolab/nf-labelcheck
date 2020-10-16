@@ -106,14 +106,13 @@ Specify input spectra, pass a text file which contains the mzML specifications
 
 This text file is tab-separated without header, contains a single line per mzML file/channel combination, specified as follows:
 
-```/path/to/file<TAB>setname<TAB>channel_name<TAB>sample_name```
+```/path/to/file<TAB>instrument<TAB>setname```
 
-Channel and sample name are optional, tab is not. E.g.:
+Instrument is for the search engine and should be one of `[qe, velos, tof, lowres]`, e.g.:
 
 ```
-/path/to/mzmls/20190715_TMT10_setA_LC.mzML   setA    126     sample1
-/path/to/mzmls/20190715_TMT10_setA_LC.mzML   setA    127N    sample2
-/path/to/mzmls/20190715_TMT10_setA_LC.mzML   setA    127C    sample3
+/path/to/mzmls/20190715_TMT10_setA_LC.mzML   qe    setA
+/path/to/mzmls/20190715_TMT10_setB_LC.mzML   velos    setB
 ```
 This will work for both pooled and single-channel runs, but if you have the luxury to run single channel MS time,
 you may want to use v1.2 of this pipeline which gives a nicer report, including more precise missed cleavage data.
@@ -127,6 +126,19 @@ Alternative to `--mzmldef`, use this to specify the location of your input mzML 
 ```
 
 The path must be enclosed in quotes when using wildcards like `*`. The report will be less nice since you cannot pass channels and samples.
+
+
+### `--sampletable`
+Tab separated file containing the sample names per channel, as follows:
+
+```
+126     setA    sample1
+127N    setA    sample2
+127C    setA    sample3
+126     setA    sample4
+127N    setA    sample5
+127C    setA    sample6
+```
 
 
 ### `--tdb`
@@ -166,9 +178,6 @@ Please make sure to also set the `-w/--work-dir` and `--outdir` parameters to a 
 
 ### `--activation`
 The MS fragmentation activation method used, used by the IsobaricQuant program from OpenMS. Default is `hcd`, but `cid`, `etd` can also be used.
-
-### `--instrument`
-The MS instrument type used to be passed to the MSGF+ search engine. Defaults to `qe`, but can also be one of `[velos, lowres, tof]`. See the [MSGF+ documentation](https://msgfplus.github.io/msgfplus/MSGFPlus.html) for more info.
 
 ### `--mods`
 Modifications file for MSGF+, contains the peptide modifications allowed by the search engine. Two examples
