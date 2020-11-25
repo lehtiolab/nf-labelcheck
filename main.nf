@@ -24,13 +24,13 @@ def helpMessage() {
       --mzmls                       Path to mzML files
       --mzmldef                     Alternative to --mzml: path to file containing list of mzMLs 
                                     tab separated: file-tab-channel path
-      --sampletable                 Tab-separated file detailing the samples in the mzMLs per channel
       --tdb                         Path to target FASTA protein database
       --isobaric VALUE              In case of isobaric, specify: tmt10plex, tmt6plex, itraq8plex, itraq4plex
       -profile                      Configuration profile to use. Can use multiple (comma separated)
                                     Available: conda, docker, singularity, awsbatch, test and more.
 
-    Options:
+    Optional arguments:
+      --sampletable                 Tab-separated file detailing the samples in the mzMLs per channel
       --mods                        Path to MSGF+ modification file (default in assets folder)
       --activation VALUE            Specify activation protocol: hcd (DEFAULT), cid, etd for isobaric 
                                     quantification. Not necessary for other functionality.

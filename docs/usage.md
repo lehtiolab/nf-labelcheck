@@ -129,7 +129,7 @@ The path must be enclosed in quotes when using wildcards like `*`. The report wi
 
 
 ### `--sampletable`
-Tab separated file containing the sample names per channel, as follows:
+Tab separated file containing the sample names per channel for annotation in QC output, as follows:
 
 ```
 126     setA    sample1

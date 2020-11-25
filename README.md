@@ -17,7 +17,7 @@ The pipeline is built using [Nextflow](https://www.nextflow.io), a workflow tool
 - install [Docker](https://docs.docker.com/engine/installation/), [Singularity](https://www.sylabs.io/guides/3.0/user-guide/), or [Conda](https://conda.io/miniconda.html)
 - run pipeline:
 
-```nextflow run lehtiolab/nf-labelcheck --mzmls '/path/to/*.mzML' --tdb /path/to/proteins.fa --isobaric tmt10plex --sampletable samples.txt```
+```nextflow run lehtiolab/nf-labelcheck --mzmls '/path/to/*.mzML' --tdb /path/to/proteins.fa --isobaric tmt10plex```
 
 The lehtiolab/nf-labelcheck pipeline comes with documentation about the pipeline, found in the `docs/` directory:
 
