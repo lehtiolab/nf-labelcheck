@@ -62,16 +62,13 @@ def main():
     pepfn = sys.argv[2]
     setname = sys.argv[3]
     maxmis = int(sys.argv[4])
-    channels = sys.argv[5]
-    samples = sys.argv[6]
+    channels = sys.argv[5].split(',') if len(sys.argv) > 5 else []
+    samples = sys.argv[6].split(',') if len(sys.argv) > 6 else []
 
-    if channels == '':
+    if len(channels) == 0:
         with open(psmfn) as fp:
             head = next(fp).strip('\n').split('\t')
             channels = [re.sub('[a-z0-9]+plex_', '', x) for x in head if 'plex' in x]
-    else:
-        channels = channels.split(',')
-    samples = [] if samples == '' else samples.split(',')
 
     outres = {'filename': setname, 'samples': samples, 'channels': channels,
             'psms': get_col_medians(psmfn, maxmis), 'peps': get_col_medians(pepfn, maxmis)}

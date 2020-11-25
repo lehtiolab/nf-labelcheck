@@ -199,30 +199,42 @@ process get_software_versions {
     """
 }
 
-
-// Create mzml input: [file, filename, channels, samples]
-Channel
-  .from(file(params.sampletable).readLines())
-    .map { it -> it.tokenize('\t') }
-    // make sample table interop with ddamsproteomics
-    // if any more info than set/channel/sample is entered, remove it
-    .map { it -> [it[1], it[0], it[2]] }
-    .groupTuple()
-    .into { channelsamples; input_order_sets }
-
 if (params.mzmldef) {
   Channel
     .from(file("${params.mzmldef}").readLines())
     .map { it -> it.tokenize('\t') }
     // Interop with ddamsproteomics: strip other than file/instrument/set
     .map { it -> [it[0], it[1], it[2]] }
-    .set{ mzml_in }
+    .into { mzmls }
 } else {
   Channel
     .fromPath(params.mzmls)
     .map { it -> [it, file(it).baseName] }
-    .set { mzml_in }
+    .into { mzmls }
 }
+mzmls
+  .tap { mzml_in }
+  .map { it -> it[2] } // setname
+  .unique()
+  .set { mzml_sets }
+
+// Create mzml input: [file, filename, channels, samples]
+if (params.sampletable) {
+  Channel
+    .from(file(params.sampletable).readLines())
+      .map { it -> it.tokenize('\t') }
+      // make sample table interop with ddamsproteomics
+      // if any more info than set/channel/sample is entered, remove it
+      .map { it -> [it[1], it[0], it[2]] }
+      .groupTuple()
+      .into { channelsamples; input_order_sets }
+} else {
+  mzml_sets
+    .map { it -> [it, 'NA', 'NA'] }
+    .into { channelsamples; input_order_sets }
+}
+
+
 
 mzml_in
   //.groupTuple(by: [0, 2]) // filename, setname
@@ -409,7 +421,7 @@ process psm2Peptides {
   set val(setname), file(psms), val(channels), val(samples) from psm_pep
   
   output:
-  set file("${setname}_stats.json") into psmmeans
+  file("${setname}_stats.json") into psmmeans
 
   script:
   col = accolmap.peptides + 1  // psm2pep adds a column
@@ -417,7 +429,7 @@ process psm2Peptides {
   """
   # Create peptide table from PSM table, picking best scoring unique peptides
   msstitch peptides -i $psms -o "${setname}.peps" --scorecolpattern svm --spectracol 1 --isobquantcolpattern plex --medianintensity --keep-psms-na-quant
-  calc_psmstats.py "$psms" "${setname}.peps" "${setname}" "${maxmiscleav}" "${channels.join(',')}" "${samples.join(',')}"
+  calc_psmstats.py "$psms" "${setname}.peps" "${setname}" "${maxmiscleav}" ${params.sampletable ? "\"${channels.join(',')}\" \"${samples.join(',')}\"" : ''}
   """
 }
 
@@ -442,7 +454,7 @@ process reportLabelCheck {
   publishDir "${params.outdir}", mode: 'copy'
 
   input:
-  set val(ordered_fns), file('means????') from psm_values
+  set val(ordered_sets), file('means????') from psm_values
 
   output:
   file('qc.html') into results
@@ -456,20 +468,19 @@ import json
 from jinja2 import Template
   
 # Data parsing 
-ordered_fns = [${ordered_fns.collect() { x -> "'$x'"}.join(',')}]
+ordered_sets = [${ordered_sets.collect() { x -> "'$x'"}.join(',')}]
 maxmiss = int(${maxmiscleav})
 data = []
 for meanfn in glob('means*'):
     with open(meanfn) as fp:
         data.append(json.load(fp))
-data = sorted(data, key=lambda x: ordered_fns.index(x['filename']))
 data = {x['filename']: x for x in data}
 
 # write to HTML template
 with open("${baseDir}/assets/report.html") as fp: 
     main = Template(fp.read())
 with open('qc.html', 'w') as fp:
-    fp.write(main.render(reportname='$custom_runName', filenames=ordered_fns, labeldata=data, maxmiscleav=maxmiss + 1))
+    fp.write(main.render(reportname='$custom_runName', filenames=ordered_sets, labeldata=data, maxmiscleav=maxmiss + 1))
 """
 }
 
