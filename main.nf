@@ -22,6 +22,8 @@ def helpMessage() {
 
     Mandatory arguments:
       --mzmls                       Path to mzML files
+      --instrument                  When using --mzmls, specify qe, velos, qehf, qehfx, lumos, timstof, lowres
+      --setname                     When using --mzmls, specify (set) name for run
       --mzmldef                     Alternative to --mzml: path to file containing list of mzMLs 
                                     tab separated: file-tab-channel path
       --tdb                         Path to target FASTA protein database
@@ -211,7 +213,7 @@ if (params.mzmldef) {
 } else {
   Channel
     .fromPath(params.mzmls)
-    .map { it -> [it, file(it).baseName] }
+    .map { it -> [it, params.instrument, params.setname] }
     .into { mzmls }
 }
 mzmls
@@ -340,7 +342,7 @@ process msgfPlus {
   script:
   plex = plexmap[isobaric]
   msgfprotocol = 0 //[tmt:4, itraq:2][plextype]
-  msgfinstrument = [orbi:1, velos:1, qe:3, lowres:0, tof:2][instrument]
+  msgfinstrument = [lowres:0, velos:1, qe:3, qehf: 3, false:0, qehfx:1, lumos:1, timstof:2][instrument]
   """
   # dynamically add isobaric type to mod file
   cat $mods > iso_mods
