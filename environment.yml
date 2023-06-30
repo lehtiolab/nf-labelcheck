@@ -1,13 +1,12 @@
 # You can use this file to create a conda environment for this pipeline:
 #   conda env create -f environment.yml
-name: nf-core-labelcheck-2.0
+name: nf-core-labelcheck-2.1
 channels:
   - conda-forge
   - bioconda
   - defaults
 dependencies:
   - bioconda::msgf_plus=2020.03.14
-  - bioconda::openms=2.5.0
   - bioconda::msstitch=3.5
   - bioconda::percolator=3.4
   - conda-forge::jinja2=2.10

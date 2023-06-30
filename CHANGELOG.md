@@ -1,5 +1,13 @@
 # lehtiolab/nf-labelcheck: Changelog
 
+## v2.1 [2023-06-30]
+- TMT18 support with new OpenMS
+- Add instrument types
+
+## v2.0 - [2020-11-25]
+- Pooled labelchecks
+- Plot and usage improvements
+
 ## v1.1 - [2020-04-28]
 - Updated MSGF+ to 20
 - Updated percolator to 3.4
