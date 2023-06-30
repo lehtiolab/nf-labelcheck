@@ -151,12 +151,10 @@ concatenated database (T-TDC).
 
 
 ### `--isobaric`
-Isobaric multiplexing chemistry used, e.g. tmt10plex, itraq8plex
+Isobaric multiplexing chemistry used, e.g. tmt10plex, itraq8plex, tmt18plex, etc
 
 ```bash
---isobaric tmt10plex
-# NB tmt16plex is specified as follows:
---isobaric tmtpro
+--isobaric tmt16plex
 ```
 
 

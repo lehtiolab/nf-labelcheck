@@ -25,14 +25,15 @@ def helpMessage() {
       --mzmldef                     Alternative to --mzml: path to file containing list of mzMLs 
                                     tab separated: file-tab-channel path
       --tdb                         Path to target FASTA protein database
-      --isobaric VALUE              In case of isobaric, specify: tmt10plex, tmt6plex, itraq8plex, itraq4plex
+      --isobaric VALUE              In case of isobaric, specify: tmt10plex, tmt6plex, itraq8plex, itraq4plex, tmt16plex, tmt18plex
       -profile                      Configuration profile to use. Can use multiple (comma separated)
                                     Available: conda, docker, singularity, awsbatch, test and more.
 
     Optional arguments:
       --sampletable                 Tab-separated file detailing the samples in the mzMLs per channel
       --mods                        Path to MSGF+ modification file (default in assets folder)
-      --activation VALUE            Specify activation protocol: hcd (DEFAULT), cid, etd for isobaric 
+      --activation VALUE            Specify activation filtering for isobaric quant: auto (DEFAULT, hcd/hcid), 
+                                    hcd, cid, etd, or any (no filter)
                                     quantification. Not necessary for other functionality.
       --maxmissedcleavages          Max amount of missed cleavages to report (default 4)
 
@@ -87,7 +88,7 @@ params.plaintext_email = false
 params.mzmldef = false
 params.sampletable = false
 params.isobaric = false
-params.activation = 'hcd' // Only for isobaric quantification, not for ID with MSGF
+params.activation = 'auto' // Only for isobaric quantification, not for ID with MSGF
 params.outdir = 'results'
 params.mods = "${baseDir}/assets/mods.txt"
 params.psmconflvl = 0.01
@@ -114,6 +115,7 @@ accolmap = [peptides: 12]
 plexmap = [tmt10plex: ["TMT6plex",  229.162932],
            tmt6plex: ["TMT6plex",  229.162932],
            tmt16plex: ["TMTpro", 304.207146],
+           tmt18plex: ["TMTpro", 304.207146],
            itraq8plex: ["iTRAQ8plex", 304.205360],
            itraq4plex: ["iTRAQ4plex", 144.102063],
 ]
@@ -194,7 +196,7 @@ process get_software_versions {
     msgf_plus | head -n1 > v_msgf.txt
     percolator -h |& head -n1 > v_perco.txt || true
     msstitch --version > v_mss.txt
-    IsobaricAnalyzer |& grep Version > v_openms.txt || true
+    echo 2.9.1 > v_openms.txt
     scrape_software_versions.py &> software_versions_mqc.yaml
     """
 }
@@ -248,6 +250,9 @@ mzml_in
 
 
 process quantifySpectra {
+  container "${workflow.containerEngine == 'singularity' && !task.ext.singularity_pull_docker_container ?
+    'https://depot.galaxyproject.org/singularity/openms:2.9.1--h135471a_1' :
+    'quay.io/biocontainers/openms:2.9.1--h135471a_1'}"
 
   input:
   set val(filename), file(infile), val(instrument), val(setname) from mzml_quant
@@ -256,7 +261,7 @@ process quantifySpectra {
   set val(filename), file("${infile}.consensusXML") into isobaricxml
 
   script:
-  activationtype = [hcd:'High-energy collision-induced dissociation', cid:'Collision-induced dissociation', etd:'Electron transfer dissociation'][params.activation]
+  activationtype = [auto: 'auto', any: 'any', hcd:'beam-type collision-induced dissociation', cid:'Collision-induced dissociation', etd:'Electron transfer dissociation'][params.activation]
   massshift = [tmt:0.0013, itraq:0.00125][plextype]
   """
   IsobaricAnalyzer  -type $isobaric -in $infile -out \"${infile}.consensusXML\" -extraction:select_activation \"$activationtype\" -extraction:reporter_mass_shift $massshift -extraction:min_precursor_intensity 1.0 -extraction:keep_unannotated_precursor true -quantification:isotope_correction true
