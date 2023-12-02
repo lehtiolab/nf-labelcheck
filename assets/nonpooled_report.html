@@ -198,8 +198,7 @@ const mistotals = missdata.map(x => Object.values(x).reduce((x,y) => x + y));
 miscleavs.forEach(mc => {
   labdsets.missed.percent.push(dset(mc, isodata.miscleav.map((x, ix) => mc in x ? x[mc] : 0), bgcols[mc], bordercols[mc]));
 });
-labdsets.missed.annot = isodata.miscleav.map(x => [0, `No missed cleavages: ${Math.round(x[0] * 100) / 100}%`]);
-
+labdsets.missed.annot = isodata.miscleav.map((x, ix) => [0, `No missed cleavages: ${Math.round(x[0] * 100) / 100}% - Total PSMs: ${isodata.pass[ix] + isodata.fail[ix]}`]); 
 
 // PLOTS:
 graphheight = 25 + 20 * labeleddata.psms.labeled.length;
