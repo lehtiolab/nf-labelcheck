@@ -1,0 +1,227 @@
+<html lang="en">
+<head>
+  <meta http-equiv="Content-Security-Policy" content="script-src 'unsafe-inline' https://cdnjs.cloudflare.com https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@0.7.0;">
+
+  <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/font-awesome/4.5.0/css/font-awesome.min.css">
+  <link rel="stylesheet" type="text/css" href="https://cdnjs.cloudflare.com/ajax/libs/bulma/0.6.2/css/bulma.min.css">
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/2.8.0/Chart.bundle.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@0.7.0"></script>
+  <title>Labelcheck report -- {{ reportname }}</title>
+</head>
+<body>
+  <div class="container">
+    <h3 class="title is-3">Labelcheck report</h3>
+    <h4 class="subtitle is-4">{{ reportname }}</h4>
+    <div class="columns">
+      <div class="column">
+    	<h5 class="title is-5"># PSMs</h5>
+          <canvas id="psms_labeled" ></canvas>
+      </div>
+      <div class="column">
+    	<h5 class="title is-5"># Peptides</h5>
+          <canvas id="peptides_labeled" ></canvas>
+      </div>
+    </div>
+    	<h5 class="title is-5">Mean channel intensities</h5>
+          <canvas id="isomeans"></canvas>
+    	<h5 class="title is-5">Missed cleavages</h5>
+          <canvas id="miscleavages"></canvas>
+  </div>
+</body>
+<script>
+function dset(label, data, bgcol, bordercol) {
+  return {label: label, data: data,
+          backgroundColor: bgcol,
+          borderColor: bordercol, borderWidth: 1};
+}
+
+function horizBar(labels, datasets, annotation, xlab, stepsize=false, annotate_value=false, annotate_icon=false) {
+//function horizBar(labels, datasets, legend, xlab, stepsize=false, annotate_value=false, percents=false, stacked=false) {
+	
+  plot = {
+    type: 'horizontalBar',
+    data: {
+        labels: labels,
+        datasets: datasets,
+    },
+    options: {
+      scales: {
+          xAxes: [{
+            scaleLabel: {display: true, labelString: xlab}, 
+            stacked: true,
+            ticks: {
+              stepSize: stepsize,
+              beginAtZero: true,
+            },
+          }],
+        yAxes: [{
+          stacked: true,
+        }]
+      }
+    }
+  };
+  plot.plugins = [ChartDataLabels];
+  plot.options.plugins = {
+    datalabels: {
+      labels: {
+        inBar: {
+          align: 'end', formatter: function(val, context) {
+//  	    value: {
+//          anchor: 'start',
+//          align: 'right',
+//          clamp: true,
+//          formatter: function(val, context) {
+            var ix = context.dataIndex;
+//   	        if (!annotate_value || context.datasetIndex !== 0) {
+            if (context.datasetIndex === annotation[ix][0]) {
+               return annotation[ix][1];
+            } else {
+              return '';
+            }
+          }
+  	      //  } else if (percents && annotate_value) {
+          //    return `${val.toFixed(1)}%`;
+  	      //  } else { return `${val.toFixed()}`; }
+  	      //}
+  	    },
+     	 icon: {
+                font: {family: 'FontAwesome', size:20,},
+                anchor: 'start',
+                align: 'right',
+                formatter: function(val, context) {
+                  var ix = context.dataIndex;
+      	     if (!annotate_icon || context.datasetIndex !== 0) {
+                    return '';
+     	     } else { return annotate_icon[ix][1]; }
+     	   }
+     	 },
+     	 value: {
+                anchor: 'start',
+                align: 'right',
+                formatter: function(val, context) {
+                  var ix = context.dataIndex;
+      	     if (!annotate_value || context.datasetIndex !== 0) {
+                    return '';
+     	     } else { return `${val}%`; }
+     	   }
+     	 },
+      }
+    }
+  }
+  return plot;
+}
+
+
+
+
+function cyclecol(gamma) {
+  return [`rgba(255, 99, 132, ${gamma})`, // red
+    `rgba(54, 162, 235, ${gamma})`, // blue
+    `rgba(255, 178, 102, ${gamma})`, // orange
+    `rgba(204, 153, 255, ${gamma})`, // purple
+    `rgba(204, 204, 0, ${gamma})`, // yellow
+    `rgba(255, 204, 255, ${gamma})`,
+    `rgba(102, 204, 0, ${gamma})`, // green
+    `rgba(255, 102, 255, ${gamma})`, // magenta
+    `rgba(192, 192, 192, ${gamma})`, // grey
+    `rgba(51, 255, 255, ${gamma})`, // lightblue
+    `rgba(153, 0, 76, ${gamma})`, // dark magenta
+    `rgba(204, 102, 0, ${gamma})`, // orangebrown
+  ];
+}
+
+function cols(label, gamma) {
+  return {'labeled': cyclecol(gamma)[0], 'nonlabeled': cyclecol(gamma)[1],}[label]
+}
+
+Chart.plugins.unregister(ChartDataLabels);
+
+const labeleddata = {{ labeldata }};
+const filenames = {{ filenames }};
+const channel_order = []{{ channels }};
+const samples = []{{ samples }};
+const isodata = {{ isomeans }};
+const missdata = {{ miscleav }};
+let inputchannels = []{{ inputchannels }};
+const miscleavs = [...Array({{ maxmiscleav }}).keys()];
+
+let labdsets = {
+  'psms': {percent: [], annot: []},
+  'peps': {percent: [], annot: []},
+  'iso': {means: [], annot: {bar: [], icon: []}},
+  'missed': {percent: [], annot: []},
+};
+
+// LABEL EFFICIENCY
+let lab;
+let nonlab;
+Object.entries(labeleddata).forEach(([ftype, feats]) => {
+	  lab = feats.labeled.map(function(val, ix) { return Math.round(val / (val + feats.nonlabeled[ix]) * 10000)/100 });
+	  nonlab = feats.nonlabeled.map(function(val, ix) { return Math.round(val / (val + feats.labeled[ix]) * 10000)/100 });
+	  labdsets[ftype].percent.push(dset('Labeled', lab, cols('labeled', 0.2), cols('labeled', 1)));
+	  labdsets[ftype].percent.push(dset('Non-labeled', nonlab, cols('nonlabeled', 0.2), cols('nonlabeled', 1)));
+  labdsets[ftype].annot = feats.labeled.map(function(x, ix) {
+    let text = [];
+    if (inputchannels.length) {text.push(inputchannels[ix]); }
+    if (samples.length) {text.push(samples[ix]); }
+    text.push(`Total passing: ${x}`);
+    return [0, text.join(', ')];
+  });
+});
+
+const bgcols = cyclecol(0.2);
+const bordercols = cyclecol(1);
+
+// ISOBARIC CHANNEL INTENSITIES
+Object.keys(isodata.medians[0])
+  .sort((a, b) => a[0].replace('N', 'A') > b[0].replace('N', 'A'))
+  .forEach((ch, chix) => {
+    let ch_data =  [];
+    filenames.forEach((fn, fnix) => {
+      ch_data.push(isodata.medians[fnix][ch]);
+    });
+    labdsets.iso.means.push(dset(ch, ch_data, bgcols[chix], bordercols[chix]));
+  });
+filenames.forEach((fn, fnix) => {
+  const fn_chvals = Object.entries(isodata.medians[fnix])
+  const fnvals = fn_chvals.map(x => x[1])
+  const chmax_ix = fnvals.indexOf(Math.max(...fnvals));
+  labdsets.iso.annot.bar.push([0, `Max intensity in ${fn_chvals[chmax_ix]}`]);
+});
+labdsets.iso.annot.icon = false;
+
+
+// MISSED CLEAVAGE:
+const mistotals = missdata.map(x => Object.values(x).reduce((x,y) => x + y));
+// Show data for 0-2 missed cleavages
+miscleavs.forEach(mc => {
+  labdsets.missed.percent.push(dset(mc, isodata.miscleav.map((x, ix) => mc in x ? x[mc] : 0), bgcols[mc], bordercols[mc]));
+});
+labdsets.missed.annot = isodata.miscleav.map(x => [0, `No missed cleavages: ${Math.round(x[0] * 100) / 100}%`]);
+
+
+// PLOTS:
+graphheight = 25 + 20 * labeleddata.psms.labeled.length;
+
+var psmcv = document.getElementById('psms_labeled');
+psmcv.height = graphheight;
+var psmctx = psmcv.getContext('2d');
+var psmchart = new Chart(psmctx, horizBar(filenames, labdsets.psms.percent, labdsets.psms.annot, '% labeled', stepsize=5, annotate_value=true));
+
+var pepcv = document.getElementById('peptides_labeled');
+pepcv.height = graphheight;
+var pepctx = pepcv.getContext('2d');
+var pepchart = new Chart(pepctx, horizBar(filenames, labdsets.peps.percent, labdsets.peps.annot, '% labeled', stepsize=5, annotate_value=true));
+
+var isocv = document.getElementById('isomeans');
+isocv.height = graphheight / 2;
+var isoctx = isocv.getContext('2d');
+var isochart = new Chart(isoctx, horizBar(filenames, labdsets.iso.means, labdsets.iso.annot.bar, 'Raw intensity', false, false, labdsets.iso.annot.icon));
+
+var misscv = document.getElementById('miscleavages');
+misscv.height = graphheight / 2;
+var missctx = misscv.getContext('2d');
+var misschart = new Chart(missctx, horizBar(filenames, labdsets.missed.percent, labdsets.missed.annot, '% missed cleavages', false, false))
+</script>
+</html>

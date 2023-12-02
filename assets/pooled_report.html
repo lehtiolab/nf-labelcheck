@@ -132,10 +132,10 @@ filenames.forEach(function(fn, ix) {
   const bordercol = cyclecol(1)[ix]
   labeleddata[fn].channels.forEach(function(ch) {
     for (const ftype of ftypes) {
-      labdsets[ftype].intensities.data.push(labeleddata[fn][ftype][ch].median);
+      labdsets[ftype].intensities.data.push(labeleddata[fn][ftype].medians[ch]);
       labdsets[ftype].intensities.backgroundColor.push(bgcol);
       labdsets[ftype].intensities.borderColor.push(bordercol);
-      labdsets[ftype].missingvals.data.push(labeleddata[fn][ftype][ch].missingvals);
+      labdsets[ftype].missingvals.data.push(labeleddata[fn][ftype].missingvals[ch]);
       labdsets[ftype].missingvals.backgroundColor.push(bgcol);
       labdsets[ftype].missingvals.borderColor.push(bordercol);
     }

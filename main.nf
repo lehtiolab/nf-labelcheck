@@ -24,7 +24,7 @@ def helpMessage() {
       --mzmls                       Path to mzML files
       --instrument                  When using --mzmls, specify qe, velos, qehf, qehfx, lumos, timstof, lowres
       --setname                     When using --mzmls, specify (set) name for run
-      --mzmldef                     Alternative to --mzml: path to file containing list of mzMLs 
+      --input                       Alternative to --mzml: path to file containing list of mzMLs 
                                     tab separated: file-tab-channel path
       --tdb                         Path to target FASTA protein database
       --isobaric VALUE              In case of isobaric, specify: tmt10plex, tmt6plex, itraq8plex, itraq4plex, tmt16plex, tmt18plex
@@ -87,7 +87,7 @@ params.name = false
 params.email = false
 params.plaintext_email = false
 
-params.mzmldef = false
+params.iput = false
 params.sampletable = false
 params.isobaric = false
 params.activation = 'auto' // Only for isobaric quantification, not for ID with MSGF
@@ -128,7 +128,7 @@ def summary = [:]
 if(workflow.revision) summary['Pipeline Release'] = workflow.revision
 summary['Run Name']         = custom_runName ?: workflow.runName
 
-summary['mzMLs or input definition']        = params.mzmldef ? params.mzmldef : params.mzmls
+summary['mzMLs or input definition'] = params.input ? params.input : params.mzmls
 summary['Sample table'] = params.sampletable
 summary['Target DB']    = params.tdb
 summary['Modifications'] = params.mods
@@ -203,24 +203,32 @@ process get_software_versions {
     """
 }
 
-if (params.mzmldef) {
-  Channel
-    .from(file("${params.mzmldef}").readLines())
-    .map { it -> it.tokenize('\t') }
-    // Interop with ddamsproteomics: strip other than file/instrument/set
-    .map { it -> [it[0], it[1], it[2]] }
-    .into { mzmls }
-} else {
-  Channel
-    .fromPath(params.mzmls)
-    .map { it -> [it, params.instrument, params.setname] }
-    .into { mzmls }
+pooled = false
+if (params.input) {
+  pooled_header = ['mzmlfile', 'instrument', 'setname']
+  single_header = ['mzmlfile', 'instrument', 'setname', 'channel']
+  mzmllines = file("${params.input}").readLines().collect { it.tokenize('\t') }
+  if (mzmllines[0] == pooled_header) {
+    pooled = true
+    Channel.from(mzmllines[1..-1])
+      .tap { mzml_in }
+      .map { it -> it[2] } // setname
+      .unique()
+      .set { uni_sets }
+    
+  } else if (mzmllines[0] == single_header) {
+    Channel.from(mzmllines[1..-1])
+      .tap { mzml_channels; mzml_samples }
+      .map { it[0..-2] }
+      .tap { mzml_in }
+      .map { it -> it[2] } // setname
+      .unique()
+      .set { uni_sets }
+
+  } else {
+    exit 1, 'Input file (--input) format should be in the form of a tab separated file with a header'
+  } 
 }
-mzmls
-  .tap { mzml_in }
-  .map { it -> it[2] } // setname
-  .unique()
-  .set { mzml_sets }
 
 // Create mzml input: [file, filename, channels, samples]
 if (params.sampletable) {
@@ -231,17 +239,31 @@ if (params.sampletable) {
       // if any more info than set/channel/sample is entered, remove it
       .map { it -> [it[1], it[0], it[2]] }
       .groupTuple()
-      .into { channelsamples; input_order_sets }
+      .into { prechannels; presamples; input_order_sets_or_fns }
+  prechannels
+    .map { [it[0], it[1]] }
+    .set { channels }
+  presamples
+    .map { [it[0], it[2]] }
+    .set { samples }
+
+} else if (!pooled) {
+  mzml_channels
+    .map { [file("${it[0]}.tsv").baseName, it[3]] }
+    .set { channels }
+  mzml_samples
+    .map { it -> [file("${it[0]}.tsv").baseName, 'NA'] }
+    .into{ samples; input_order_sets_or_fns }
+
 } else {
-  mzml_sets
-    .map { it -> [it, 'NA', 'NA'] }
-    .into { channelsamples; input_order_sets }
+  uni_sets
+    .map { it -> [it, 'NA'] }
+    .into { channels; samples; input_order_sets_or_fns }
 }
 
 
 
 mzml_in
-  //.groupTuple(by: [0, 2]) // filename, setname
   .map { it -> [file(it[0]).baseName, file(it[0]), it[1], it[2]] }
   .tap { mzml_msgf; mzml_quant }
   .toList()
@@ -398,10 +420,10 @@ tmzidtsv_perco
 process createPSMTable {
 
   input:
-  set val(setnames), file('psms?'), file('lookup') from prepsm
+  set val(setnames), path('psms?'), path('lookup') from prepsm
 
   output:
-  set val(setnames), file({setnames.collect() { it + '.tsv' }}) into setpsmtables
+  set val(setnames), path('*.tsv') into setpsmtables
   
 
   script:
@@ -413,30 +435,43 @@ process createPSMTable {
   cat lookup > $psmlookup
   msstitch psmtable -i psms.txt --dbfile "$psmlookup" -o "${outpsms}" --addmiscleav --addbioset --isobaric
   sed 's/\\#SpecFile/SpectraFile/' -i "${outpsms}"
-  msstitch split -i "${outpsms}" --splitcol bioset
+# ${pooled}
+  ${pooled ? "msstitch split -i '${outpsms}' --splitcol bioset" : "msstitch split -i '${outpsms}' --splitcol 1"}
+  
   """
 }
 
-setpsmtables
-  .transpose()
-  .join(channelsamples)
-  .set { psm_pep }
+if (pooled) {
+  setpsmtables
+    .transpose()
+    .join(channels)
+    .join(samples)
+    .set { psm_pep }
+} else {
+  setpsmtables
+    .transpose()
+    .map { [it[1].baseName, it[1]] }
+    .join(channels)
+    .join(samples)
+    .set { psm_pep }
+}
 
 process psm2Peptides {
 
   input:
-  set val(setname), file(psms), val(channels), val(samples) from psm_pep
+  set val(set_or_fn), file(psms), val(channels), val(samples) from psm_pep
   
   output:
-  file("${setname}_stats.json") into psmmeans
+  file("${set_or_fn}_stats.json") into psmmeans
 
   script:
   col = accolmap.peptides + 1  // psm2pep adds a column
   modweight = Math.round(plexmap[isobaric][1] * 1000) / 1000
   """
   # Create peptide table from PSM table, picking best scoring unique peptides
-  msstitch peptides -i $psms -o "${setname}.peps" --scorecolpattern svm --spectracol 1 --isobquantcolpattern plex --medianintensity --keep-psms-na-quant
-  calc_psmstats.py "$psms" "${setname}.peps" "${setname}" "${maxmiscleav}" ${params.sampletable ? "\"${channels.join(',')}\" \"${samples.join(',')}\"" : ''}
+  msstitch peptides -i $psms -o "${set_or_fn}.peps" --scorecolpattern svm --spectracol 1 --isobquantcolpattern plex --medianintensity --keep-psms-na-quant
+  calc_psmstats.py "$psms" "${set_or_fn}.peps" "${set_or_fn}" "${maxmiscleav}" "+${modweight}"
+${params.sampletable ? "\"${channels.join(',')}\" \"${samples.join(',')}\"" : ''}
   """
 }
 
@@ -447,26 +482,27 @@ psmmeans
   .toList()
   .set { psmdata }
 
-input_order_sets
-  .map { it -> it[0] } // setnames
+input_order_sets_or_fns
+  .map { it -> it[0] } // set/file names
   .toList()
   .map { it -> [it] } // when merging to keep this a list
   .merge(psmdata)
   .set { psm_values }
 
 
-process reportLabelCheck {
-
-  cache false
+process pooledReportLabelCheck {
   publishDir "${params.outdir}", mode: 'copy'
+
+  when: pooled
 
   input:
   set val(ordered_sets), file('means????') from psm_values
 
   output:
-  file('qc.html') into results
+  path('qc.html')
 
   script:
+  report = "${baseDir}/assets/pooled_report.html"
   """
 #!/usr/bin/env python 
   
@@ -484,10 +520,77 @@ for meanfn in glob('means*'):
 data = {x['filename']: x for x in data}
 
 # write to HTML template
-with open("${baseDir}/assets/report.html") as fp: 
+with open("${report}") as fp: 
     main = Template(fp.read())
 with open('qc.html', 'w') as fp:
     fp.write(main.render(reportname='$custom_runName', filenames=ordered_sets, labeldata=data, maxmiscleav=maxmiss + 1))
+"""
+}
+
+
+process nonPooledReportLabelCheck {
+
+  publishDir "${params.outdir}", mode: 'copy'
+
+  when: !pooled
+
+  input:
+// name stats files after mzml fns for easy access FIXME
+  set val(ordered_fns), file('means????') from psm_values
+
+  output:
+  path('qc.html')
+
+  script:
+  report = "${baseDir}/assets/nonpooled_report.html"
+  """
+#!/usr/bin/env python 
+  
+from glob import glob
+import json
+from collections import defaultdict
+from jinja2 import Template
+  
+# Data parsing 
+ordered_fns = [${ordered_fns.collect() { x -> "'$x'"}.join(',')}]
+
+data = []
+for meanfn in sorted(glob('means*'), key=lambda x: int(x[x.index('ns')+2:])):
+    with open(meanfn) as fp:
+        data.append(json.load(fp))
+data = {x['filename']: x for x in data}
+print(data)
+
+
+# collect tmt mean intensities (keep input sort order for bars)
+isomeans = defaultdict(list)
+for fn in ordered_fns:
+    for ch, val in data[fn]['psms'].items():
+        isomeans[ch].append(val)
+
+channels = sorted([x for x in isomeans.keys()], key=lambda x: x.replace('N', 'A'))
+print(channels)
+    
+labeldata = {
+    'psms': {'labeled': [], 'nonlabeled': []},
+    'peps': {'labeled': [], 'nonlabeled': []},
+}
+miscleav = []
+
+# data for % labeled in input-file order
+for ftype in ['peps', 'psms']:
+   for fn in ordered_fns:
+      labeldata[ftype]['labeled'].append(data[fn][ftype]['pass'])
+      labeldata[ftype]['nonlabeled'].append(data[fn][ftype]['fail'])
+      if ftype == 'psm': 
+          miscleav.append(data[fn][ftype]['miscleav'])
+maxmiss = int(${maxmiscleav})
+
+# write to HTML template
+with open("${report}") as fp: 
+    main = Template(fp.read())
+with open('qc.html', 'w') as fp:
+    fp.write(main.render(reportname='$custom_runName', filenames=ordered_fns, labeldata=labeldata, isomeans=dict(isomeans), miscleav=miscleav, maxmiscleav=maxmiss))
 """
 }
 
