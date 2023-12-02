@@ -139,12 +139,13 @@ Chart.plugins.unregister(ChartDataLabels);
 
 const labeleddata = {{ labeldata }};
 const filenames = {{ filenames }};
-const channel_order = []{{ channels }};
+const inputchannels = {{ channels }};
 const samples = []{{ samples }};
 const isodata = {{ isomeans }};
 const missdata = {{ miscleav }};
-let inputchannels = []{{ inputchannels }};
 const miscleavs = [...Array({{ maxmiscleav }}).keys()];
+
+const fn_ch = filenames.map((fn, ix) => `${fn}_${inputchannels[ix]}`)
 
 let labdsets = {
   'psms': {percent: [], annot: []},
@@ -188,8 +189,8 @@ filenames.forEach((fn, fnix) => {
   const fnvals = fn_chvals.map(x => x[1])
   const chmax_ix = fnvals.indexOf(Math.max(...fnvals));
   labdsets.iso.annot.bar.push([0, `Max intensity in ${fn_chvals[chmax_ix]}`]);
+  labdsets.iso.annot.icon.push([inputchannels.length - 1, fn_chvals[chmax_ix][0] === inputchannels[fnix] ? '\uf00c': '\uf00d']);
 });
-labdsets.iso.annot.icon = false;
 
 
 // MISSED CLEAVAGE:
@@ -206,21 +207,21 @@ graphheight = 25 + 20 * labeleddata.psms.labeled.length;
 var psmcv = document.getElementById('psms_labeled');
 psmcv.height = graphheight;
 var psmctx = psmcv.getContext('2d');
-var psmchart = new Chart(psmctx, horizBar(filenames, labdsets.psms.percent, labdsets.psms.annot, '% labeled', stepsize=5, annotate_value=true));
+var psmchart = new Chart(psmctx, horizBar(fn_ch, labdsets.psms.percent, labdsets.psms.annot, '% labeled', stepsize=5, annotate_value=true));
 
 var pepcv = document.getElementById('peptides_labeled');
 pepcv.height = graphheight;
 var pepctx = pepcv.getContext('2d');
-var pepchart = new Chart(pepctx, horizBar(filenames, labdsets.peps.percent, labdsets.peps.annot, '% labeled', stepsize=5, annotate_value=true));
+var pepchart = new Chart(pepctx, horizBar(fn_ch, labdsets.peps.percent, labdsets.peps.annot, '% labeled', stepsize=5, annotate_value=true));
 
 var isocv = document.getElementById('isomeans');
 isocv.height = graphheight / 2;
 var isoctx = isocv.getContext('2d');
-var isochart = new Chart(isoctx, horizBar(filenames, labdsets.iso.means, labdsets.iso.annot.bar, 'Raw intensity', false, false, labdsets.iso.annot.icon));
+var isochart = new Chart(isoctx, horizBar(fn_ch, labdsets.iso.means, labdsets.iso.annot.bar, 'Raw intensity', false, false, labdsets.iso.annot.icon));
 
 var misscv = document.getElementById('miscleavages');
 misscv.height = graphheight / 2;
 var missctx = misscv.getContext('2d');
-var misschart = new Chart(missctx, horizBar(filenames, labdsets.missed.percent, labdsets.missed.annot, '% missed cleavages', false, false))
+var misschart = new Chart(missctx, horizBar(fn_ch, labdsets.missed.percent, labdsets.missed.annot, '% missed cleavages', false, false))
 </script>
 </html>

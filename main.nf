@@ -250,10 +250,10 @@ if (params.sampletable) {
 } else if (!pooled) {
   mzml_channels
     .map { [file("${it[0]}.tsv").baseName, it[3]] }
-    .set { channels }
+    .into{ channels; input_order_sets_or_fns }
   mzml_samples
     .map { it -> [file("${it[0]}.tsv").baseName, 'NA'] }
-    .into{ samples; input_order_sets_or_fns }
+    .set{ samples }
 
 } else {
   uni_sets
@@ -483,9 +483,10 @@ psmmeans
   .set { psmdata }
 
 input_order_sets_or_fns
-  .map { it -> it[0] } // set/file names
   .toList()
-  .map { it -> [it] } // when merging to keep this a list
+  .transpose()
+  .toList()
+ // .map { it -> [it] } // when merging to keep this a list
   .merge(psmdata)
   .set { psm_values }
 
@@ -496,7 +497,7 @@ process pooledReportLabelCheck {
   when: pooled
 
   input:
-  set val(ordered_sets), file('means????') from psm_values
+  tuple val(ordered_sets), val(ordered_ch), path('means????') from psm_values
 
   output:
   path('qc.html')
@@ -536,7 +537,7 @@ process nonPooledReportLabelCheck {
 
   input:
 // name stats files after mzml fns for easy access FIXME
-  set val(ordered_fns), file('means????') from psm_values
+  tuple val(ordered_fns), val(ordered_ch), path('means????') from psm_values
 
   output:
   path('qc.html')
@@ -553,6 +554,7 @@ from jinja2 import Template
   
 # Data parsing 
 ordered_fns = [${ordered_fns.collect() { x -> "'$x'"}.join(',')}]
+ordered_chs = [${ordered_ch.collect() { x-> "'$x'"}.join(',')}]
 
 data = []
 for meanfn in sorted(glob('means*'), key=lambda x: int(x[x.index('ns')+2:])):
@@ -590,7 +592,8 @@ maxmiss = int(${maxmiscleav})
 with open("${report}") as fp: 
     main = Template(fp.read())
 with open('qc.html', 'w') as fp:
-    fp.write(main.render(reportname='$custom_runName', filenames=ordered_fns, labeldata=labeldata, isomeans=dict(isomeans), miscleav=miscleav, maxmiscleav=maxmiss))
+    fp.write(main.render(reportname='$custom_runName', filenames=ordered_fns, channels=ordered_chs,
+        labeldata=labeldata, isomeans=dict(isomeans), miscleav=miscleav, maxmiscleav=maxmiss))
 """
 }
 
