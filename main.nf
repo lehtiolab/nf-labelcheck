@@ -561,8 +561,6 @@ for meanfn in sorted(glob('means*'), key=lambda x: int(x[x.index('ns')+2:])):
     with open(meanfn) as fp:
         data.append(json.load(fp))
 data = {x['filename']: x for x in data}
-print(data)
-
 
 # collect tmt mean intensities (keep input sort order for bars)
 isomeans = defaultdict(list)

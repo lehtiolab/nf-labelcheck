@@ -2,11 +2,7 @@
 
 **A proteomics pipeline for running labelchecks**.
 
-[![Build Status](https://api.travis-ci.org/lehtiolab/nf-labelcheck.svg?branch=master)](https://travis-ci.org/lehtiolab/nf-labelcheck)
-[![Nextflow](https://img.shields.io/badge/nextflow-%E2%89%A519.04.1-brightgreen.svg)](https://www.nextflow.io/)
-
-[![install with bioconda](https://img.shields.io/badge/install%20with-bioconda-brightgreen.svg)](http://bioconda.github.io/)
-[![Docker](https://img.shields.io/badge/docker%20build-automated-blue)](https://hub.docker.com/r/lehtiolab/nf-labelcheck)
+[![Nextflow](https://img.shields.io/badge/nextflow-%E2%89%A522.05.1-brightgreen.svg)](https://www.nextflow.io/)
 
 ## Introduction
 The pipeline is built using [Nextflow](https://www.nextflow.io), a workflow tool to run tasks across multiple compute infrastructures in a very portable manner. It comes with docker containers making installation trivial and results highly reproducible.
@@ -47,4 +43,4 @@ The lehtiolab/nf-labelcheck pipeline comes with documentation about the pipeline
 - [Troubleshooting](https://nf-co.re/usage/troubleshooting)
 
 ## Credits
-lehtiolab/nf-labelcheck was originally written by Jorrit Boekel and tries to follow the [nf-core](https://nf-co.re) best practices and templates.
+lehtiolab/nf-labelcheck was originally written by Jorrit Boekel and took inspiration and boilerplate from the [nf-core](https://nf-co.re) best practices and templates.

@@ -21,7 +21,6 @@ def get_col_medians(fn, maxmis, mod):
         # Isobaric intensities
         plexcols = [x for x in filter(lambda y: 'plex' in y[1], [field for field in enumerate(head)])] 
         data = {'medians': defaultdict(list), 'missingvals': {x[1]: 0 for x in plexcols}}
-        print(data)
         miscleav = {x: 0 for x in range(0, maxmis + 1)}
         numpsms, passing, ntermfails, fails = 0, 0, 0, 0
         for line in fp:
