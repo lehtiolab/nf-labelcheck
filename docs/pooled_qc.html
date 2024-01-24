@@ -1,0 +1,211 @@
+<html lang="en">
+<head>
+  <meta http-equiv="Content-Security-Policy" content="script-src 'unsafe-inline' https://cdnjs.cloudflare.com https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@0.7.0;">
+
+  <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/font-awesome/4.5.0/css/font-awesome.min.css">
+  <link rel="stylesheet" type="text/css" href="https://cdnjs.cloudflare.com/ajax/libs/bulma/0.6.2/css/bulma.min.css">
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/2.8.0/Chart.bundle.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@0.7.0"></script>
+  <title>Labelcheck report -- pooled</title>
+</head>
+<body>
+  <div class="container">
+    <h3 class="title is-3">Labelcheck report</h3>
+    <h4 class="subtitle is-4">pooled</h4>
+    <div class="columns">
+      <div class="column">
+    	<h5 class="title is-5">PSM median reporter ion intensities</h5>
+          <canvas id="psms_labeled" ></canvas>
+    	<h5 class="title is-5">% PSMs with missing values per reporter</h5>
+          <canvas id="psms_missingval" ></canvas>
+    	<h5 class="title is-5">% PSMs with missed cleavages per set</h5>
+          <canvas id="psmmiscleavages"></canvas>
+      </div>
+      <div class="column">
+    	<h5 class="title is-5">Peptide median reporter ion intensities</h5>
+          <canvas id="peptides_labeled" ></canvas>
+    	<h5 class="title is-5">% Peptides with missing values per reporter</h5>
+          <canvas id="peptides_missingval" ></canvas>
+    	<h5 class="title is-5">% Peptides with missed cleavages per set</h5>
+          <canvas id="pepmiscleavages"></canvas>
+      </div>
+    </div>
+  </div>
+</body>
+<script>
+function dset(label, data, bgcol, bordercol) {
+  return {label: label, data: data,
+          backgroundColor: bgcol,
+          borderColor: bordercol, borderWidth: 1};
+}
+
+function horizBar(labels, datasets, legend, annotation, xlab, stacked=false) {
+	
+  plot = {
+    type: 'horizontalBar',
+    data: {
+        labels: labels,
+        datasets: datasets,
+    },
+    options: {
+      scales: {
+          xAxes: [{
+            scaleLabel: {display: true, labelString: xlab}, 
+            stacked: stacked,
+            ticks: {
+              stepSize: false,
+              beginAtZero: true,
+            },
+          }],
+        yAxes: [{
+          stacked: stacked,
+        }]
+      }
+    }
+  };
+  if (!legend) {
+    plot.options.legend = {display: false};
+  }
+  plot.plugins = [ChartDataLabels];
+  plot.options.plugins = {
+    datalabels: {
+      labels: {
+  	    value: {
+          anchor: 'start',
+          align: 'right',
+          clamp: true,
+          formatter: function(val, context) {
+            var ix = context.dataIndex;
+            if (annotation && context.datasetIndex === annotation[ix][0]) {
+               return annotation[ix][1];
+            } else {
+              return '';
+            }
+  	      }
+  	    },
+      }
+    }
+  }
+  return plot;
+}
+
+
+
+
+function cyclecol(gamma) {
+  return [`rgba(255, 99, 132, ${gamma})`, // red
+    `rgba(54, 162, 235, ${gamma})`, // blue
+    `rgba(255, 178, 102, ${gamma})`, // orange
+    `rgba(204, 153, 255, ${gamma})`, // purple
+    `rgba(204, 204, 0, ${gamma})`, // yellow
+    `rgba(255, 204, 255, ${gamma})`,
+    `rgba(102, 204, 0, ${gamma})`, // green
+    `rgba(255, 102, 255, ${gamma})`, // magenta
+    `rgba(192, 192, 192, ${gamma})`, // grey
+    `rgba(51, 255, 255, ${gamma})`, // lightblue
+    `rgba(153, 0, 76, ${gamma})`, // dark magenta
+    `rgba(204, 102, 0, ${gamma})`, // orangebrown
+  ];
+}
+
+Chart.plugins.unregister(ChartDataLabels);
+
+const labeleddata = {'setA': {'filename': 'setA', 'samples': [], 'channels': ['126', '127N', '127C', '128N', '128C', '129N', '129C', '130N', '130C', '131'], 'psms': {'medians': {'126': 102429.4, '127N': 108495.15, '127C': 115958.20000000001, '128N': 113345.5, '128C': 110473.4, '129N': 134873.84999999998, '129C': 115019.0, '130N': 142079.85, '130C': 72706.055, '131': 130526.6}, 'missingvals': {'126': 0.0, '127N': 0.0, '127C': 0.0, '128N': 0.0, '128C': 0.0, '129N': 0.0, '129C': 0.0, '130N': 0.0, '130C': 0.0, '131': 0.0}, 'miscleav': {'0': 76.66666666666667, '1': 23.333333333333332, '2': 0.0}, 'pass': 59, 'fail': 1}, 'peps': {'medians': {'126': 102429.4, '127N': 108495.15, '127C': 115958.20000000001, '128N': 118078.95, '128C': 110473.4, '129N': 134744.72999999998, '129C': 117341.9, '130N': 142079.85, '130C': 72706.055, '131': 130526.6, '126 - # quanted PSMs': 1.0, '127N - # quanted PSMs': 1.0, '127C - # quanted PSMs': 1.0, '128N - # quanted PSMs': 1.0, '128C - # quanted PSMs': 1.0, '129N - # quanted PSMs': 1.0, '129C - # quanted PSMs': 1.0, '130N - # quanted PSMs': 1.0, '130C - # quanted PSMs': 1.0, '131 - # quanted PSMs': 1.0}, 'missingvals': {'126': 0.0, '127N': 0.0, '127C': 0.0, '128N': 0.0, '128C': 0.0, '129N': 0.0, '129C': 0.0, '130N': 0.0, '130C': 0.0, '131': 0.0, '126 - # quanted PSMs': 0.0, '127N - # quanted PSMs': 0.0, '127C - # quanted PSMs': 0.0, '128N - # quanted PSMs': 0.0, '128C - # quanted PSMs': 0.0, '129N - # quanted PSMs': 0.0, '129C - # quanted PSMs': 0.0, '130N - # quanted PSMs': 0.0, '130C - # quanted PSMs': 0.0, '131 - # quanted PSMs': 0.0}, 'miscleav': {'0': 82.6923076923077, '1': 17.307692307692307, '2': 0.0}, 'pass': 51, 'fail': 1}}, 'setB': {'filename': 'setB', 'samples': [], 'channels': ['126', '127N', '127C', '128N', '128C', '129N', '129C', '130N', '130C', '131'], 'psms': {'medians': {'126': 129796.3, '127N': 154303.2, '127C': 168207.1, '128N': 151224.7, '128C': 150512.4, '129N': 182496.2, '129C': 170977.4, '130N': 193837.40000000002, '130C': 109589.45, '131': 185456.2}, 'missingvals': {'126': 0.0, '127N': 1.4084507042253522, '127C': 0.0, '128N': 0.0, '128C': 0.0, '129N': 0.0, '129C': 0.0, '130N': 1.4084507042253522, '130C': 1.4084507042253522, '131': 0.0}, 'miscleav': {'0': 84.50704225352112, '1': 15.492957746478872, '2': 0.0}, 'pass': 70, 'fail': 1}, 'peps': {'medians': {'126': 133652.55, '127N': 160452.25, '127C': 182095.0, '128N': 159743.05, '128C': 155747.65, '129N': 195594.0, '129C': 180386.45, '130N': 217685.3, '130C': 113792.85, '131': 206503.45, '126 - # quanted PSMs': 1.0, '127N - # quanted PSMs': 1.0, '127C - # quanted PSMs': 1.0, '128N - # quanted PSMs': 1.0, '128C - # quanted PSMs': 1.0, '129N - # quanted PSMs': 1.0, '129C - # quanted PSMs': 1.0, '130N - # quanted PSMs': 1.0, '130C - # quanted PSMs': 1.0, '131 - # quanted PSMs': 1.0}, 'missingvals': {'126': 0.0, '127N': 0.0, '127C': 0.0, '128N': 0.0, '128C': 0.0, '129N': 0.0, '129C': 0.0, '130N': 0.0, '130C': 0.0, '131': 0.0, '126 - # quanted PSMs': 0.0, '127N - # quanted PSMs': 0.0, '127C - # quanted PSMs': 0.0, '128N - # quanted PSMs': 0.0, '128C - # quanted PSMs': 0.0, '129N - # quanted PSMs': 0.0, '129C - # quanted PSMs': 0.0, '130N - # quanted PSMs': 0.0, '130C - # quanted PSMs': 0.0, '131 - # quanted PSMs': 0.0}, 'miscleav': {'0': 83.33333333333334, '1': 16.666666666666664, '2': 0.0}, 'pass': 65, 'fail': 1}}};
+const filenames = ['setA', 'setB'];
+const miscleavs = [...Array(3).keys()];
+
+let labdsets = {
+  psms: {intensities: {data: [], backgroundColor: [], borderColor: [], borderWidth: 1},
+    missingvals: {data: [], backgroundColor: [], borderColor: [], borderWidth: 1},
+    miscleav: [], int_annot: [], missedannot: [], misval_annot: [],
+  },
+  peps: {intensities: {data: [], backgroundColor: [], borderColor: [], borderWidth: 1},
+    missingvals: {data: [], backgroundColor: [], borderColor: [], borderWidth: 1},
+    miscleav: [], int_annot: [], missedannot: [], misval_annot: [],
+  },
+};
+
+const ftypes = ['psms', 'peps'];
+filenames.forEach(function(fn, ix) {
+  const bgcol = cyclecol(0.2)[ix]
+  const bordercol = cyclecol(1)[ix]
+  labeleddata[fn].channels.forEach(function(ch) {
+    for (const ftype of ftypes) {
+      const medianval = labeleddata[fn][ftype].medians[ch];
+      labdsets[ftype].intensities.data.push(medianval);
+      labdsets[ftype].int_annot.push([0, Math.round(medianval)]);
+      labdsets[ftype].intensities.backgroundColor.push(bgcol);
+      labdsets[ftype].intensities.borderColor.push(bordercol);
+      const misval = labeleddata[fn][ftype].missingvals[ch];
+      labdsets[ftype].missingvals.data.push(misval);
+      labdsets[ftype].misval_annot.push([0, `${Math.round(misval * 100) / 100}%`]);
+      labdsets[ftype].missingvals.backgroundColor.push(bgcol);
+      labdsets[ftype].missingvals.borderColor.push(bordercol);
+    }
+  })
+});
+
+
+labdsets.annot = filenames.map(fn => labeleddata[fn].channels.map((ch, ix) => {
+  let label;
+  if (labeleddata[fn].samples.length) {
+    label = `${fn} - ${ch} - ${labeleddata[fn].samples[ix]}`;
+  } else {
+    label = `${fn} - ${ch}`;
+  }
+  return label
+})).flat();
+
+miscleavs.forEach(function(mcnum) {
+  const bgcol = cyclecol(0.2)[mcnum];
+  const bgcolbor = cyclecol(1)[mcnum];
+  ftypes.forEach(function(ftype) {
+    labdsets[ftype].miscleav.push({
+      label: `${mcnum} missed cleavage(s)`,
+      data: filenames.map(fn => labeleddata[fn][ftype].miscleav[mcnum]),
+      backgroundColor: bgcol,
+      borderColor: bgcolbor,
+      borderWidth: 1
+    })
+  })
+})
+labdsets.psms.missedannot = filenames.map(fn => [0, `No missed cleavages: ${Math.round(labeleddata[fn].psms.miscleav[0] * 100) / 100}% - Total PSMs: ${labeleddata[fn].psms.pass + labeleddata[fn].psms.fail}`]); 
+labdsets.peps.missedannot = filenames.map(fn => [0, `No missed cleavages: ${Math.round(labeleddata[fn].peps.miscleav[0] * 100) / 100}% - Total peptides: ${labeleddata[fn].peps.pass + labeleddata[fn].peps.fail}`]); 
+
+
+graphheight = 40 + 12 * filenames.map(fn => labeleddata[fn].channels).flat().length;
+setgraphheight = 40 + 12 * filenames.length;
+
+var psmcv = document.getElementById('psms_labeled');
+psmcv.height = graphheight;
+var psmctx = psmcv.getContext('2d');
+var psmchart = new Chart(psmctx, horizBar(labdsets.annot, [labdsets.psms.intensities], false, labdsets.psms.int_annot, 'intensity'));
+
+let psmnacv = document.getElementById('psms_missingval');
+psmnacv.height = graphheight;
+let psmnactx = psmnacv.getContext('2d');
+let psmnachart = new Chart(psmnactx, horizBar(labdsets.annot, [labdsets.psms.missingvals], false, labdsets.psms.misval_annot, '% missing values'));
+
+var pepcv = document.getElementById('peptides_labeled');
+pepcv.height = graphheight;
+var pepctx = pepcv.getContext('2d');
+var pepchart = new Chart(pepctx, horizBar(labdsets.annot, [labdsets.peps.intensities], false, labdsets.peps.int_annot, 'intensity'));
+
+let pepnacv = document.getElementById('peptides_missingval');
+pepnacv.height = graphheight;
+let pepnactx = pepnacv.getContext('2d');
+let pepnachart = new Chart(pepnactx, horizBar(labdsets.annot, [labdsets.peps.missingvals], false, labdsets.peps.misval_annot, '% missing values'));
+
+let psmmisscv = document.getElementById('psmmiscleavages');
+psmmisscv.height = setgraphheight;
+const psmmissctx = psmmisscv.getContext('2d');
+const psmmisschart = new Chart(psmmissctx, horizBar(filenames, labdsets.psms.miscleav, true, labdsets.psms.missedannot, '% missed cleavages', stacked=true));
+
+let pepmisscv = document.getElementById('pepmiscleavages');
+pepmisscv.height = setgraphheight;
+const pepmissctx = pepmisscv.getContext('2d');
+const pepmisschart = new Chart(pepmissctx, horizBar(filenames, labdsets.peps.miscleav, true, labdsets.peps.missedannot, '% missed cleavages', stacked=true));
+
+</script>
+</html>
