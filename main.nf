@@ -383,14 +383,17 @@ mzids
   .set { mzids_2pin }
 
 
+
 process percolator {
 
   input:
   set val(setname), val(filenames), path(mzids), path(tsvs) from mzids_2pin
 
   output:
-  set val(setname), path('target.tsv') into tmzidtsv_perco
+  set val(setname), path(outfile) into tmzidtsv_perco
 
+  script:
+  outfile = "${setname}_target.tsv"
   """
   for mzid in ${mzids.collect() { "'$it'" }.join(' ')}; do echo \${mzid} >> metafile; done
   msgf2pin -o percoin.xml -e trypsin -P "decoy_" metafile
@@ -399,6 +402,7 @@ process percolator {
   msstitch perco2psm --perco perco.xml -i ${tsvs.collect() { "'$it'" }.join(' ')} --mzids ${mzids.collect() { "'$it'" }.join(' ')} --filtpsm 0.01 --filtpep 0.01 -d outtables
   msstitch concat -i outtables/* -o psms
   msstitch split -i psms --splitcol \$(head -n1 psms | tr '\t' '\n' | grep -n ^TD\$ | cut -f 1 -d':')
+  mv target.tsv "${outfile}"
   """
 }
 
@@ -416,11 +420,22 @@ tmzidtsv_perco
 /*
 * Step 3: Post-process peptide identification data
 */
+def listify(it) {
+  /* This function is useful when needing a list even when having a single item
+  - Single items in channels get unpacked from a list
+  - Processes expect lists. Even though it would be fine
+  without a list, for single-item-lists any special characters are not escaped by NF
+  in the script, which leads to errors. See:
+  https://github.com/nextflow-io/nextflow/discussions/4240
+  */
+  return it instanceof java.util.List ? it : [it]
+}
+
 
 process createPSMTable {
 
   input:
-  set val(setnames), path('psms?'), path('lookup') from prepsm
+  set val(setnames), path(psms), path('lookup') from prepsm
 
   output:
   set val(setnames), path('*.tsv') into setpsmtables
@@ -430,7 +445,7 @@ process createPSMTable {
   psmlookup = "psmlookup.sql"
   outpsms = "psmtable.txt"
   """
-  msstitch concat -i psms* -o psms.txt
+  msstitch concat -i ${listify(psms).collect() {"$it"}.join(' ')} -o psms.txt
   # SQLite lookup needs copying to not modify the input file which would mess up a rerun with -resume
   cat lookup > $psmlookup
   msstitch psmtable -i psms.txt --dbfile "$psmlookup" -o "${outpsms}" --addmiscleav --addbioset --isobaric
