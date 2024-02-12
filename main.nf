@@ -354,7 +354,7 @@ process msgfPlus {
   cpus = config.poolSize < 2 ? config.poolSize : 2
 
   input:
-  set val(filename), file(x), val(instrument), val(setname) from mzml_msgf
+  set val(filename), path(mzml), val(instrument), val(setname) from mzml_msgf
   file(db) from concatdb
   file mods
 
@@ -371,7 +371,7 @@ process msgfPlus {
   echo ${plex[1]},*,opt,N-term,${plex[0]} >> iso_mods
   echo ${plex[1]},K,opt,any,${plex[0]} >> iso_mods
   # run search and create TSV, cleanup afterwards
-  msgf_plus -Xmx8G -d $db -s $x -o "${filename}.mzid" -thread ${task.cpus * 3} -mod iso_mods -tda 0 -t 10.0ppm -ti -1,2 -m 0 -inst ${msgfinstrument} -e 1 -protocol ${msgfprotocol} -ntt 2 -minLength 7 -maxLength 50 -minCharge 2 -maxCharge 6 -n 1 -addFeatures 1 -maxMissedCleavages ${params.maxmissedcleavages}
+  msgf_plus -Xmx8G -d $db -s $mzml -o "${filename}.mzid" -thread ${task.cpus * 3} -mod iso_mods -tda 0 -t 10.0ppm -ti -1,2 -m 0 -inst ${msgfinstrument} -e 1 -protocol ${msgfprotocol} -ntt 2 -minLength 7 -maxLength 50 -minCharge 2 -maxCharge 6 -n 1 -addFeatures 1 -maxMissedCleavages ${params.maxmissedcleavages}
   msgf_plus -Xmx3500M edu.ucsd.msjava.ui.MzIDToTsv -i "${filename}.mzid" -o "${filename}.mzid.tsv"
   rm ${db.baseName.replaceFirst(/\.fasta/, "")}.c*
   """
