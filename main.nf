@@ -21,11 +21,10 @@ def helpMessage() {
     nextflow run lehtiolab/nf-labelcheck --mzmls '*.mzML' --tdb swissprot.fa --mods assets/mods.txt -profile docker
 
     Mandatory arguments:
-      --mzmls                       Path to mzML files
-      --instrument                  When using --mzmls, specify qe, velos, qehf, qehfx, lumos, timstof, lowres
-      --setname                     When using --mzmls, specify (set) name for run
-      --input                       Alternative to --mzml: path to file containing list of mzMLs 
-                                    tab separated: file-tab-channel path
+      --input                       Path to file containing list of mzMLs, tab separated, either:
+                                       filepath -tab- instrument -tab- setname -tab- channel
+                                    OR (for pooled LC):
+                                       filepath -tab- instrument -tab- setname
       --tdb                         Path to target FASTA protein database
       --isobaric VALUE              In case of isobaric, specify: tmt10plex, tmt6plex, itraq8plex, itraq4plex, tmt16plex, tmt18plex
       -profile                      Configuration profile to use. Can use multiple (comma separated)
@@ -450,9 +449,7 @@ process createPSMTable {
   cat lookup > $psmlookup
   msstitch psmtable -i psms.txt --dbfile "$psmlookup" -o "${outpsms}" --addmiscleav --addbioset --isobaric
   sed 's/\\#SpecFile/SpectraFile/' -i "${outpsms}"
-# ${pooled}
   ${pooled ? "msstitch split -i '${outpsms}' --splitcol bioset" : "msstitch split -i '${outpsms}' --splitcol 1"}
-  
   """
 }
 
@@ -585,8 +582,7 @@ for fn in ordered_fns:
         isomeans[ch].append(val)
 
 channels = sorted([x for x in isomeans.keys()], key=lambda x: x.replace('N', 'A'))
-print(channels)
-    
+
 labeldata = {
     'psms': {'labeled': [], 'nonlabeled': []},
     'peps': {'labeled': [], 'nonlabeled': []},
