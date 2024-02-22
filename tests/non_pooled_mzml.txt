@@ -1,3 +1,4 @@
 mzmlfile	instrument	setname	channel
 ${testdata}/xc-cll-f10_500.mzML	qe	setA	126
+${testdata}/xc-cll-f10_500_ln.mzML	qe	setA	127N
 ${testdata}/xc-cll-f10_2_500.mzML	qe	setB	130C

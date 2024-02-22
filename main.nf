@@ -393,7 +393,7 @@ process percolator {
   set val(setname), path(outfile) into tmzidtsv_perco
 
   script:
-  outfile = "${setname}_target.tsv"
+  outfile = "${setname}_target.txt"
   """
   for mzid in ${mzids.collect() { "'$it'" }.join(' ')}; do echo \${mzid} >> metafile; done
   msgf2pin -o percoin.xml -e trypsin -P "decoy_" metafile
@@ -464,8 +464,9 @@ if (pooled) {
     .set { psm_pep }
 } else {
   setpsmtables
-    .transpose()
-    .map { [it[1].baseName, it[1]] }
+    .map { it[1] } 
+    .flatten()
+    .map { [it.baseName, it] }
     .join(channels)
     .join(samples)
     .set { psm_pep }
