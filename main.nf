@@ -433,12 +433,18 @@ def listify(it) {
 
 
 process createPSMTable {
+  publishDir "${params.outdir}", mode: 'copy',
+    saveAs: {filename ->
+        if (filename == outpsms) filename
+        else null
+    }
 
   input:
   set val(setnames), path(psms), path('lookup') from prepsm
 
   output:
   set val(setnames), path('*.tsv') into setpsmtables
+  path(outpsms) into outpsms
   
 
   script:
