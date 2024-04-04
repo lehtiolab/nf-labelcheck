@@ -9,6 +9,7 @@
 ----------------------------------------------------------------------------------------
 */
 
+nextflow.enable.dsl = 1
 
 def helpMessage() {
     log.info nfcoreHeader()
