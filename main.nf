@@ -293,7 +293,7 @@ process quantifySpectra {
 }
 
 
-process createSpectraLookup {
+process createNewSpectraLookup {
 
   input:
   set val(filenames), file(mzmlfiles), val(setnames) from mzmlfiles_all
