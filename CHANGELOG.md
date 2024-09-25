@@ -1,5 +1,10 @@
 # lehtiolab/nf-labelcheck: Changelog
 
+## v2.2 [2024-09-25]
+- Handle empty channels
+- Single pipeline for both pooled/single file LC
+- Better QC
+
 ## v2.1 [2023-06-30]
 - TMT18 support with new OpenMS
 - Add instrument types
