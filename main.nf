@@ -273,7 +273,7 @@ mzml_in
   .set{ mzmlfiles_all }
 
 
-process quantifySpectra {
+process isobaricQuant {
   container "${workflow.containerEngine == 'singularity' && !task.ext.singularity_pull_docker_container ?
     'https://depot.galaxyproject.org/singularity/openms:2.9.1--h135471a_1' :
     'quay.io/biocontainers/openms:2.9.1--h135471a_1'}"

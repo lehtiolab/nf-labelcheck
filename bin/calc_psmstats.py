@@ -63,11 +63,14 @@ def get_col_medians(fn, maxmis, mod):
     for col in plexcols:
         # Remove keys "tmt10plex_128C" etc, replace with "128C"
         ch = re.sub('[a-z0-9]+plex_', '', col[1])
-        intensities = data['medians'].pop(col[1])
+        try:
+            intensities = data['medians'].pop(col[1])
+        except KeyError:
+            intensities = [0]
         try:
             medianints = median(intensities)
         except ValueError:
-            # E.g. empty channel
+            # E.g. empty channel, should not happen though as we already have KeyError above
             medianints = 0
         data['medians'][ch] = medianints 
         # Also for missing values:
