@@ -66,7 +66,7 @@ def summary = [:]
 if(workflow.revision) summary['Pipeline Release'] = workflow.revision
 summary['Run Name']         = custom_runName ?: workflow.runName
 
-summary['mzMLs or input definition'] = params.input ? params.input : params.mzmls
+summary['Input definition'] = params.input
 summary['Sample table'] = params.sampletable
 summary['Target DB']    = params.tdb
 summary['Isobaric tags'] = params.isobaric
@@ -533,12 +533,12 @@ workflow {
   if (params.sampletable) {
     Channel
       .from(file(params.sampletable).readLines())
-        .map { it -> it.tokenize('\t') }
-        // make sample table interop with ddamsproteomics
-        // if any more info than set/channel/sample is entered, remove it
-        .map { it -> [it[1], it[0], it[2]] } // set, channel, sample
-        .groupTuple()
-        .set { channel_sample }
+      .map { it -> it.tokenize('\t') }
+      // make sample table interop with ddamsproteomics
+      // if any more info than set/channel/sample is entered, remove it
+      .map { it -> [it[1], it[0], it[2]] } // set, channel, sample
+      .groupTuple()
+      .set { channel_sample }
   
   } else if (!pooled) {
     inputch

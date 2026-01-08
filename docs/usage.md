@@ -1,9 +1,6 @@
 # lehtiolab/nf-labelcheck: Usage
 
 ## Table of contents
-
-<!-- Install Atom plugin markdown-toc-auto for this ToC to auto-update on save -->
-<!-- TOC START min:2 max:3 link:true asterisk:true update:true -->
 * [Table of contents](#table-of-contents)
 * [Introduction](#introduction)
 * [Running the pipeline](#running-the-pipeline)
@@ -12,24 +9,7 @@
 * [Main arguments](#main-arguments)
 * [Job resources](#job-resources)
   * [Automatic resubmission](#automatic-resubmission)
-  * [Custom resource requests](#custom-resource-requests)
-* [AWS Batch specific parameters](#aws-batch-specific-parameters)
-  * [`--awsqueue`](#--awsqueue)
-  * [`--awsregion`](#--awsregion)
 * [Other command line parameters](#other-command-line-parameters)
-  * [`--outdir`](#--outdir)
-  * [`--email`](#--email)
-  * [`-name`](#-name)
-  * [`-resume`](#-resume)
-  * [`-c`](#-c)
-  * [`--custom_config_version`](#--custom_config_version)
-  * [`--custom_config_base`](#--custom_config_base)
-  * [`--max_memory`](#--max_memory)
-  * [`--max_time`](#--max_time)
-  * [`--max_cpus`](#--max_cpus)
-  * [`--plaintext_email`](#--plaintext_email)
-  * [`--monochrome_logs`](#--monochrome_logs)
-<!-- TOC END -->
 
 
 ## Introduction
@@ -82,24 +62,20 @@ Use this parameter to choose a configuration profile. Profiles can give configur
 
 If `-profile` is not specified at all the pipeline will be run locally and expects all software to be installed and available on the `PATH`.
 
-* `conda`
-  * A generic configuration profile to be used with [conda](https://conda.io/docs/)
-  * Pulls most software from [Bioconda](https://bioconda.github.io/)
 * `docker`
   * A generic configuration profile to be used with [Docker](http://docker.com/)
-  * Pulls software from dockerhub: [`nf-labelcheck`](http://hub.docker.com/r/lehtiolab/nf-labelcheck/)
+  * Pulls software from docker registries
 * `singularity`
   * A generic configuration profile to be used with [Singularity](http://singularity.lbl.gov/)
-  * Pulls software from DockerHub: [`nf-labelcheck`](http://hub.docker.com/r/lehtiolab/nf-labelcheck/)
+  * Pulls software from docker registries or Galaxy's singularity depot
 * `test`
   * A profile with a complete configuration for automated testing
-  * Includes links to test data so needs no other parameters
 
-### `--mzmldef`
+### `--input`
 Specify input spectra, pass a text file which contains the mzML specifications
 
 ```bash
---mzmldef /path/to/data/mzmls.txt
+--input /path/to/data/mzmls.txt
 ```
 
 This text file is tab-separated without header, contains a single line per mzML file/channel combination, specified as follows:
@@ -114,16 +90,6 @@ Instrument is for the search engine and should be one of `[qe, velos, tof, lowre
 ```
 This will work for both pooled and single-channel runs, but if you have the luxury to run single channel MS time,
 you may want to use v1.2 of this pipeline which gives a nicer report, including more precise missed cleavage data.
-
-
-### `--mzmls`
-Alternative to `--mzmldef`, use this to specify the location of your input mzML files. For example:
-
-```bash
---mzmls 'path/to/data/sample_*.mzML'
-```
-
-The path must be enclosed in quotes when using wildcards like `*`. The report will be less nice since you cannot pass channels and samples.
 
 
 ### `--sampletable`
@@ -155,6 +121,21 @@ Isobaric multiplexing chemistry used, e.g. tmt10plex, itraq8plex, tmt18plex, etc
 --isobaric tmt16plex
 ```
 
+### `--activation`
+The MS fragmentation activation method used, used by the IsobaricQuant program from OpenMS. Default is `hcd`, but `cid`, `etd` can also be used.
+
+### `--maxmissedcleavages`
+The maximum amount of allowed missed cleavages in the report and search. Default is 2.
+
+### `--maxvarmods`
+The maximum amount of variable modifications per peptide, default is 2.
+
+### `--prectol`
+Precursor tolerance, default is '10.0ppm'
+
+### `--minpeplen, --maxpeplen, --mincharge, --maxcharge`
+Minimum/maximum length and charge for peptides
+
 
 ## Job resources
 ### Automatic resubmission
@@ -162,21 +143,6 @@ Each step in the pipeline has a default set of requirements for number of CPUs, 
 
 
 ## Other command line parameters
-
-### `--activation`
-The MS fragmentation activation method used, used by the IsobaricQuant program from OpenMS. Default is `hcd`, but `cid`, `etd` can also be used.
-
-### `--mods`
-Modifications file for MSGF+, contains the peptide modifications allowed by the search engine. Two examples
-can be found in the `assets` folder. These files are optional (default is Oxidation, Carbamidomethylation), and do 
-not need to contain the isobaric mods which are specified on the command line.
-
-```bash
---mods /path/to/assets/tmtmods.txt
-```
-
-### `--maxmissedcleavages`
-The maximum amount of allowed missed cleavages in the report and search. Default is 2.
 
 ### `--outdir`
 The output directory where the results will be saved.
@@ -201,19 +167,3 @@ Note - you can use this to override pipeline defaults.
 ## Run the pipeline
 cd /path/to/my/data
 nextflow run /path/to/pipeline/ --custom_config_base /path/to/my/configs/configs-master/
-```
-
-> Note that the nf-core/tools helper package has a `download` command to download all required pipeline
-> files + singularity containers + institutional configs in one go for you, to make this process easier.
-
-### `--max_memory`
-Use to set a top-limit for the default memory requirement for each process.
-Should be a string in the format integer-unit. eg. `--max_memory '8.GB'`
-
-### `--max_time`
-Use to set a top-limit for the default time requirement for each process.
-Should be a string in the format integer-unit. eg. `--max_time '2.h'`
-
-### `--max_cpus`
-Use to set a top-limit for the default CPU requirement for each process.
-Should be a string in the format integer-unit. eg. `--max_cpus 1`

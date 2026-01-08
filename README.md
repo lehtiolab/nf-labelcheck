@@ -30,6 +30,13 @@ mzmlfile    instrument    setname
 ...
 ```
 
+Raw files instead of mzML are also allowed, change the header key:
+```
+rawfile    instrument    setname
+/path/to/fn.raw    qe    setA
+...
+```
+
 Each of these inputs leads to a slightly different report, see examples for [pooled](docs/pooled_qc.html), and [non-pooled](docs/nonpooled_qc.html) results.
 The pipeline performs identification and quantification, and the output contains graphs to display the amount of incorporated isobaric label per sample on both peptide and PSM level.
 For the non-pooled runs, a PSM/peptide is considered to be not labeled if any of its K residues or its N-term have not been labeled. For pooled reports there is information

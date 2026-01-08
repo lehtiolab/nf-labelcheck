@@ -1,7 +1,7 @@
 # lehtiolab/nf-labelcheck: Output
 
 ## Output
-The output is a single file, qc.html, which summarises the result of the labelcheck run. See an example [here](example_qc.html)
+The output is a single file, qc.html, which summarises the result of the labelcheck run. See an example [here](pooled_qc.html)
 
 ## Pipeline overview
 The pipeline is built using [Nextflow](https://www.nextflow.io/)
