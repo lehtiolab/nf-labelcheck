@@ -542,7 +542,7 @@ workflow {
   
   } else if (!pooled) {
     inputch
-      .map { ["${it[0].baseName}.${it[0].extension}", 'NA', it[3]] }
+      .map { ["${it[0].baseName}.${it[0].extension}", it[3], 'NA'] }
       .set { channel_sample }
   
   } else {
