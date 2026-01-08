@@ -21,12 +21,12 @@
   },
   "msgfplus": {
       "version": "2024.03.26",
-      "docker": "quay.io/biocontainers/msgf_plus:2020.03.14--0",
+      "docker": "quay.io/biocontainers/msgf_plus:2024.03.26--hdfd78af_0",
       "singularity": "https://depot.galaxyproject.org/singularity/msgf_plus:2024.03.26--hdfd78af_0"
   },
   "percolator": {
       "version": "3.6.5",
-      "docker": "quay.io/biocontainers/percolator:3.4--hfba9568_1",
+      "docker": "quay.io/biocontainers/percolator:3.6.5--h6351f2a_0",
       "singularity": "https://depot.galaxyproject.org/singularity/percolator:3.6.5--h6351f2a_0"
   }
 }

@@ -82,8 +82,6 @@ Use this parameter to choose a configuration profile. Profiles can give configur
 
 If `-profile` is not specified at all the pipeline will be run locally and expects all software to be installed and available on the `PATH`.
 
-* `awsbatch`
-  * A generic configuration profile to be used with AWS Batch.
 * `conda`
   * A generic configuration profile to be used with [conda](https://conda.io/docs/)
   * Pulls most software from [Bioconda](https://bioconda.github.io/)
@@ -163,15 +161,6 @@ Isobaric multiplexing chemistry used, e.g. tmt10plex, itraq8plex, tmt18plex, etc
 Each step in the pipeline has a default set of requirements for number of CPUs, memory and time. For most of the steps in the pipeline, if the job exits with an error code of `143` (exceeded requested resources) it will automatically resubmit with higher requests (2 x original, then 3 x original). If it still fails after three times then the pipeline is stopped.
 
 
-## AWS Batch specific parameters
-Running the pipeline on AWS Batch requires a couple of specific parameters to be set according to your AWS Batch configuration. Please use the `-awsbatch` profile and then specify all of the following parameters.
-### `--awsqueue`
-The JobQueue that you intend to use on AWS Batch.
-### `--awsregion`
-The AWS region to run your job in. Default is set to `eu-west-1` but can be adjusted to your needs.
-
-Please make sure to also set the `-w/--work-dir` and `--outdir` parameters to a S3 storage bucket of your choice - you'll get an error message notifying you if you didn't.
-
 ## Other command line parameters
 
 ### `--activation`
@@ -192,9 +181,6 @@ The maximum amount of allowed missed cleavages in the report and search. Default
 ### `--outdir`
 The output directory where the results will be saved.
 
-### `--email`
-Set this parameter to your e-mail address to get a summary e-mail with details of the run sent to you when the workflow exits. If set in your user config file (`~/.nextflow/config`) then you don't need to specify this on the command line for every run.
-
 ### `-name` or `--name`
 Name for the pipeline run. If not specified, Nextflow will automatically generate a random mnemonic.
 
@@ -211,26 +197,6 @@ Specify the path to a specific config file (this is a core NextFlow command).
 **NB:** Single hyphen (core Nextflow option)
 
 Note - you can use this to override pipeline defaults.
-
-### `--custom_config_version`
-Provide git commit id for custom Institutional configs hosted at `nf-core/configs`. This was implemented for reproducibility purposes. Default is set to `master`.
-
-```bash
-## Download and use config file with following git commid id
---custom_config_version d52db660777c4bf36546ddb188ec530c3ada1b96
-```
-
-### `--custom_config_base`
-If you're running offline, nextflow will not be able to fetch the institutional config files
-from the internet. If you don't need them, then this is not a problem. If you do need them,
-you should download the files from the repo and tell nextflow where to find them with the
-`custom_config_base` option. For example:
-
-```bash
-## Download and unzip the config files
-cd /path/to/my/configs
-wget https://github.com/nf-core/configs/archive/master.zip
-unzip master.zip
 
 ## Run the pipeline
 cd /path/to/my/data
@@ -251,9 +217,3 @@ Should be a string in the format integer-unit. eg. `--max_time '2.h'`
 ### `--max_cpus`
 Use to set a top-limit for the default CPU requirement for each process.
 Should be a string in the format integer-unit. eg. `--max_cpus 1`
-
-### `--plaintext_email`
-Set to receive plain-text e-mails instead of HTML formatted.
-
-### `--monochrome_logs`
-Set to disable colourful command line output and live life in monochrome.
