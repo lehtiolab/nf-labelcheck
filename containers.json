@@ -1,0 +1,32 @@
+{
+  "msstitch": {
+    "version": "3.17",
+    "singularity": "https://depot.galaxyproject.org/singularity/msstitch:3.17--pyhdfd78af_0",
+    "docker": "quay.io/biocontainers/msstitch:3.17--pyhdfd78af_0"
+  },
+  "proteowizard": {
+      "version": "3.0.25292",
+      "docker": "quay.io/biocontainers/proteowizard:3_0_25292_c9a6a18--h9948957_0",
+      "singularity": "https://depot.galaxyproject.org/singularity/proteowizard%3A3_0_25292_c9a6a18--h9948957_0"
+  },
+  "openms": {
+      "version": "3.3.0",
+      "docker": "quay.io/biocontainers/openms:3.3.0--h0656172_8",
+      "singularity": "https://depot.galaxyproject.org/singularity/openms:3.3.0--h0656172_8"
+  },
+  "ddamsproteomics": {
+      "version": "3.0",
+      "docker": "ghcr.io/lehtiolab/ddamsproteomics:3.0",
+      "singularity": "docker://ghcr.io/lehtiolab/ddamsproteomics:3.0"
+  },
+  "msgfplus": {
+      "version": "2024.03.26",
+      "docker": "quay.io/biocontainers/msgf_plus:2020.03.14--0",
+      "singularity": "https://depot.galaxyproject.org/singularity/msgf_plus:2024.03.26--hdfd78af_0"
+  },
+  "percolator": {
+      "version": "3.6.5",
+      "docker": "quay.io/biocontainers/percolator:3.4--hfba9568_1",
+      "singularity": "https://depot.galaxyproject.org/singularity/percolator:3.6.5--h6351f2a_0"
+  }
+}
