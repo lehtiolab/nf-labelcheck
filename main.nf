@@ -94,16 +94,35 @@ log.info "\033[2m----------------------------------------------------\033[0m"
 
 
 
+process runThermoFileparser {
+
+  tag 'thermorawfileparser'
+  container params.__containers[tag][workflow.containerEngine]
+
+  input:
+  tuple path(x), val(inst), val(setname)
+
+  output:
+  tuple path(outfile), val(inst), val(setname)
+
+  script:
+  outfile = "${x.baseName}.mzML"
+  """
+  thermorawfileparser -i=${x} -b=${outfile} -f=2 -m=1 -c=metadata -p=1 -L=1- -l=1
+  """
+}
+
+
 process isobaricQuant {
 
   tag 'openms'
   container params.__containers[tag][workflow.containerEngine]
 
   input:
-  tuple val(filename), path(infile), val(instrument), val(setname), val(isobaric), val(activationtype), val(massshift)
+  tuple path(infile), val(instrument), val(setname), val(isobaric), val(activationtype), val(massshift)
 
   output:
-  tuple val(filename), path("${infile}.consensusXML")
+  path("${infile}.consensusXML")
 
   script:
   """
@@ -118,7 +137,7 @@ process createNewSpectraLookup {
   container params.__containers[tag][workflow.containerEngine]
 
   input:
-  tuple val(filenames), path(mzmlfiles), val(setnames)
+  tuple path(mzmlfiles), val(setnames)
 
   output:
   path('mslookup_db.sqlite')
@@ -172,14 +191,15 @@ process createTargetDecoyFasta {
 process msgfPlus {
 
   input:
-  tuple path(db), val(filename), path(mzml), val(instrument), val(setname), path(mods), val(plexname), val(plexmass)
+  tuple path(db), path(mzml), val(instrument), val(setname), path(mods), val(plexname), val(plexmass)
 
   output:
-  tuple val(setname), val(filename), file("${filename}.mzid"), file("${filename}.mzid.tsv")
+  tuple val(setname), file("${filename}.mzid"), file("${filename}.mzid.tsv")
   
   script:
   msgfprotocol = 0
   msgfinstrument = [lowres:0, velos:1, qe:3, qehf: 3, false:0, qehfx:1, lumos:1, timstof:2][instrument]
+  filename = mzml.baseName
   """
   # dynamically add isobaric type to mod file
   cat $mods > iso_mods
@@ -198,7 +218,7 @@ process percolator {
   container params.__containers[tag][workflow.containerEngine]
 
   input:
-  tuple val(setname), val(filenames), path(mzids), path(tsvs)
+  tuple val(setname), path(mzids), path(tsvs)
 
   output:
   tuple val(setname), path('perco.xml'), path(mzids), path(tsvs)
@@ -431,22 +451,25 @@ workflow {
   modweight = Math.round(plexname_mass[1] * 1000) / 1000
   pooled = false
   if (params.input) {
-    pooled_header = ['mzmlfile', 'instrument', 'setname']
-    single_header = ['mzmlfile', 'instrument', 'setname', 'channel']
-    mzmllines = file("${params.input}").readLines().collect { it.tokenize('\t') }
-    if (mzmllines[0] == pooled_header) {
+    inputlines = file("${params.input}").readLines().collect { it.tokenize('\t') }
+    if (inputlines[0][0] == 'rawfile') {
+      filetype = 'raw'
+    } else if (inputlines[0][0] == 'mzmlfile') {
+      filetype = 'mzml'
+    }
+    inputch = Channel.from(inputlines[1..-1]).map { it -> [file(it[0])] + it[1..-1] }
+    if (inputlines[0][-1] == 'setname') {
       pooled = true
-      Channel.from(mzmllines[1..-1])
-        .tap { mzml_in }
+        inputch
+        .tap { files_in }
         .map { it -> it[2] } // setname
         .unique()
         .set { uni_sets }
       
-    } else if (mzmllines[0] == single_header) {
-      Channel.from(mzmllines[1..-1])
-        .tap { mzml_channels; mzml_samples }
+    } else if (inputlines[0][-1] == 'channel') {
+        inputch
         .map { it[0..-2] }
-        .tap { mzml_in }
+        .tap { files_in }
         .map { it -> it[2] } // setname
         .unique()
         .set { uni_sets }
@@ -468,12 +491,8 @@ workflow {
         .set { channel_sample }
   
   } else if (!pooled) {
-    mzml_samples
-      .map { it -> [file("${it[0]}.tsv").baseName, 'NA'] }
-      .set{ samples }
-    mzml_channels
-      .map { [file("${it[0]}.tsv").baseName, it[3]] }
-      .join(samples)
+    inputch
+      .map { ["${it[0].baseName}.${it[0].extension}", 'NA', it[3]] }
       .set { channel_sample }
   
   } else {
@@ -482,25 +501,28 @@ workflow {
       .set { channel_sample }
   }
 
-  mzml_in
-    .map { it -> [file(it[0]).baseName, file(it[0]), it[1], it[2]] }
-    .tap { mzml_msgf; mzml_quant }
-    .toList()
-    .map { it.sort( {a, b -> a[1] <=> b[1]}) } // sort on sample for consistent .sh script in -resume
-    // Cannot transpose because when there is only one file it flattens the list
-    .map { it -> [it.collect() { it[0] }, it.collect() { it[1] }, it.collect() { it[3]} ] } // lists: [basefns], [mzmlfiles], [setnames]
-    .set{ mzmlfiles_all }
-  
-  
-  mzml_quant
+  files_in
+  | branch { it ->
+    raw: filetype == 'raw'
+    mzml: filetype == 'mzml'
+  } | set { files_classified }
+  files_classified.raw
+  | runThermoFileparser
+  | concat(files_classified.mzml)
+  | set { mzmls }
+
+  mzmls
   | map { it + [isobaric, activationtype, massshift] }
   | isobaricQuant
   | toList()
-  | map { it.sort({a, b -> a[0] <=> b[0]}) }
-  | map { it -> it.collect() { it[1] } }
+  | map { it.sort({a, b -> a[0].baseName <=> b[0].baseName}) }
   | set { isofiles_sorted }
   
-  mzmlfiles_all
+  mzmls
+  | toList()
+  | map { it.sort( {a, b -> a[0].baseName <=> b[0].baseName}) } // sort files for consistent .sh script in -resume
+  // Cannot transpose because when there is only one file it flattens the list
+  | map { it -> [it.collect() { it[0] }, it.collect() { it[2]} ] } // lists: [mzmlfiles], [setnames]
   | createNewSpectraLookup
   | combine(isofiles_sorted.toList())
   | quantLookup
@@ -508,7 +530,7 @@ workflow {
   mods = channel.fromPath(params.mods)
   channel.fromPath(params.tdb)
   | createTargetDecoyFasta
-  | combine(mzml_msgf)
+  | combine(mzmls)
   | combine(mods)
   | map { it + [plexname_mass[0], plexname_mass[1]] }
   | msgfPlus

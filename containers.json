@@ -1,4 +1,9 @@
 {
+  "thermorawfileparser": {
+    "version": "3.17",
+    "docker": "quay.io/biocontainers/thermorawfileparser:1.4.5--h05cac1d_1",
+    "singularity": "docker://quay.io/biocontainers/thermorawfileparser:1.4.5--h05cac1d_1"
+  },
   "msstitch": {
     "version": "3.17",
     "singularity": "https://depot.galaxyproject.org/singularity/msstitch:3.17--pyhdfd78af_0",
