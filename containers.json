@@ -24,10 +24,15 @@
       "docker": "ghcr.io/lehtiolab/ddamsproteomics:3.0",
       "singularity": "docker://ghcr.io/lehtiolab/ddamsproteomics:3.0"
   },
-  "msgfplus": {
-      "version": "2024.03.26",
-      "docker": "quay.io/biocontainers/msgf_plus:2024.03.26--hdfd78af_0",
-      "singularity": "https://depot.galaxyproject.org/singularity/msgf_plus:2024.03.26--hdfd78af_0"
+  "jq": {
+      "version": "1.5",
+      "docker": "quay.io/biocontainers/jq:1.5--4",
+      "singularity": "https://depot.galaxyproject.org/singularity/jq:1.5--4"
+  },
+  "sage": {
+      "version": "0.14.7",
+      "docker": "ghcr.io/lazear/sage:v0.14.7",
+      "singularity": "https://depot.galaxyproject.org/singularity/sage-proteomics:0.14.7--hc1c3326_2"
   },
   "percolator": {
       "version": "3.6.5",

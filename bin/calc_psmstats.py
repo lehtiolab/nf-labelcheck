@@ -9,12 +9,14 @@ import json
 
 def get_col_medians(fn, maxmis, mod):
     if mod:
-        ml = len(mod)
+        # mod length plus brackets e.g. [229.16293]
+        fullmod = f'[{mod}]'
+        ml = len(fullmod)
     with open(fn) as fp:
         head = next(fp).strip('\n').split('\t')
-        mccol = head.index('missed_cleavage')
+        mccol = head.index('missed_cleavages')
         try:
-            pepcol = head.index('Peptide')
+            pepcol = head.index('peptide')
         except ValueError:
             pepcol = head.index('Peptide sequence')
 
@@ -28,7 +30,7 @@ def get_col_medians(fn, maxmis, mod):
             numpsms += 1
             pep = line[pepcol]
             # There is always a mod in labelcheck, but maybe not in dig checks
-            if mod and pep[:ml] != mod:
+            if mod and pep[:ml] != fullmod:
                 ntermfails += 1
                 fails +=1
             # TODO this treats nterm and other fails as identical
@@ -36,7 +38,7 @@ def get_col_medians(fn, maxmis, mod):
                 passing += 1
                 for lys in re.finditer('K', pep):
                     ix = lys.start() + 1
-                    if not pep[ix: ix+ml] == mod:
+                    if not pep[ix: ix+ml] == fullmod:
                         fails += 1
                         passing -= 1
                         break

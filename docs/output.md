@@ -7,13 +7,13 @@ The output is a single file, qc.html, which summarises the result of the labelch
 The pipeline is built using [Nextflow](https://www.nextflow.io/)
 and processes data using the following steps:
 
-* [MSGF+](#msgf) - Peptide identification search engine
+* [Sage](#sage) - Peptide identification search engine
 * [Percolator](#percolator) - Target-decoy scoring
 * [OpenMS](#openms) - Quantification of isobaric tags
 * [Msstitch](#msstitch) - Post processing, protein inference
 
-## MSGF+
-[MSGF+](https://omics.pnl.gov/software/ms-gf) (aka MSGF+ or MSGFPlus) performs peptide identification by scoring MS/MS spectra against peptides derived from a protein sequence database.
+## Sage
+[Sage](https://sage-docs.vercel.app/) performs peptide identification by scoring MS/MS spectra against peptides derived from a protein sequence database.
 
 
 ## Percolator

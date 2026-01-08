@@ -16,7 +16,7 @@ def helpMessage() {
 
     The typical command for running the pipeline is as follows:
 
-    nextflow run lehtiolab/nf-labelcheck --mzmls '*.mzML' --tdb swissprot.fa --mods assets/mods.txt -profile docker
+    nextflow run lehtiolab/nf-labelcheck --mzmls '*.mzML' --tdb swissprot.fa -profile docker
 
     Mandatory arguments:
       --input                       Path to file containing list of mzMLs, tab separated, either:
@@ -30,7 +30,6 @@ def helpMessage() {
 
     Optional arguments:
       --sampletable                 Tab-separated file detailing the samples in the mzMLs per channel
-      --mods                        Path to MSGF+ modification file (default in assets folder)
       --activation VALUE            Specify activation filtering for isobaric quant: auto (DEFAULT, hcd/hcid), 
                                     hcd, cid, etd, or any (no filter)
                                     quantification. Not necessary for other functionality.
@@ -70,7 +69,6 @@ summary['Run Name']         = custom_runName ?: workflow.runName
 summary['mzMLs or input definition'] = params.input ? params.input : params.mzmls
 summary['Sample table'] = params.sampletable
 summary['Target DB']    = params.tdb
-summary['Modifications'] = params.mods
 summary['Isobaric tags'] = params.isobaric
 summary['Isobaric activation'] = params.activation
 
@@ -188,46 +186,100 @@ process createTargetDecoyFasta {
 }
 
 
-process msgfPlus {
-
+process sagePrepare {
+  tag 'jq'
+  container params.__containers[tag][workflow.containerEngine]
+ 
   input:
-  tuple path(db), path(mzml), val(instrument), val(setname), path(mods), val(plexname), val(plexmass)
+  tuple val(minlen), val(maxlen), val(mincharge), val(maxcharge), val(maxmiscleav), val(maxvarmods), val(prectol), val(plexmass), path('sage.json')
 
   output:
-  tuple val(setname), file("${filename}.mzid"), file("${filename}.mzid.tsv")
+  path('config.json')
   
   script:
-  msgfprotocol = 0
-  msgfinstrument = [lowres:0, velos:1, qe:3, qehf: 3, false:0, qehfx:1, lumos:1, timstof:2][instrument]
-  filename = mzml.baseName
+  prectol_num = prectol.replaceAll('[^0-9\\.]', '')
+  prectol_unit = prectol.replaceAll('[0-9\\.]', '')
   """
-  # dynamically add isobaric type to mod file
-  cat $mods > iso_mods
-  echo ${plexmass},*,opt,N-term,${plexname} >> iso_mods
-  echo ${plexmass},K,opt,any,${plexname} >> iso_mods
-  # run search and create TSV, cleanup afterwards
-  msgf_plus -Xmx8G -d $db -s $mzml -o "${filename}.mzid" -thread ${task.cpus * 3} -mod iso_mods -tda 0 -t 10.0ppm -ti -1,2 -m 0 -inst ${msgfinstrument} -e 1 -protocol ${msgfprotocol} -ntt 2 -minLength 7 -maxLength 50 -minCharge 2 -maxCharge 6 -n 1 -addFeatures 1 -maxMissedCleavages ${params.maxmissedcleavages}
-  msgf_plus -Xmx3500M edu.ucsd.msjava.ui.MzIDToTsv -i "${filename}.mzid" -o "${filename}.mzid.tsv"
-  rm ${db.baseName.replaceFirst(/\.fasta/, "")}.c*
+  cat sage.json | jq '.database.enzyme.missed_cleavages=${maxmiscleav} | \
+    .database.static_mods.K=${plexmass} | \
+    .database.static_mods."^"=${plexmass} | \
+    .database.enzyme.min_len=${minlen} | \
+    .database.enzyme.max_len=${maxlen} | .database.max_variable_mods=${maxvarmods} | \
+    .precursor_tol={$prectol_unit: [-${prectol_num}, ${prectol_num}]} | \
+    .precursor_charge=[${mincharge}, ${maxcharge}]' > config.json
   """
 }
 
-process percolator {
 
+def stripchars_infile(x, return_oldfile=false) {
+  // FIXME %, ?, * fn turns a basename into a list because they are wildcards
+  // Replace special characters since they cause trouble in percolator XML output downstream
+  // e.g. & is not allowed in XML apparently (percolator doesnt encode it)
+  // and LXML then crashes on reading it.
+  // Also NF doesnt quote e.g. semicolons it seems.
+  def scriptinfile = "${x.baseName}.${x.extension}"
+  def parsed_file = scriptinfile.replaceAll('[&<>\'"]', '_')
+  if (return_oldfile) {
+    return [parsed_file != scriptinfile, parsed_file, scriptinfile]
+  } else {
+    return [parsed_file != scriptinfile, parsed_file]
+  }
+}
+
+
+process sage {
+  tag 'sage'
+  container params.__containers[tag][workflow.containerEngine]
+
+  input:
+  tuple path('config.json'), path(specfile), val(instrumenttype), val(setname), path(db)
+
+  output:
+  tuple val(setname), path("${specfile.baseName}.pin"), emit: perco
+  tuple val(setname), path("${specfile.baseName}.tsv"), emit: tsv
+
+  script:
+  // Bruker from msconvert has merged= frame= scanStart= scanEnd= as scannr
+  // Bruker from tdf2mzml has index=.. as scannr
+  remove_scan_index_str = instrumenttype == 'bruker'
+  (is_stripped, parsed_infile) = stripchars_infile(specfile)
+  (_, parsed_basename) = stripchars_infile(file(specfile.baseName))
+  """
+  ${is_stripped ? "ln -s ${specfile} '${parsed_infile}'" : ''}
+  export RAYON_NUM_THREADS=${task.cpus}
+  export SAGE_LOG=trace
+  sage --disable-telemetry-i-dont-want-to-improve-sage --write-pin -f $db config.json $parsed_infile
+  ${remove_scan_index_str ? "sed -i 's/index=//' results.sage.pin" : ''}
+  ${remove_scan_index_str ? "sed -E -i 's/merged=([0-9]+) [SEa-z0-9\\ =]+/\\1/' results.sage.pin" : ''}
+  ${remove_scan_index_str ? "sed -i 's/index=//' results.sage.tsv" : ''}
+  ${remove_scan_index_str ? "sed -E -i 's/merged=([0-9]+) [SEa-z0-9\\ =]+/\\1/' results.sage.tsv" : ''}
+
+  # Add set
+  awk -F \$'\\t' '{OFS=FS ; print \$0, "Biological set" }' <( head -n1 results.sage.tsv) > "${specfile.baseName}.tsv"
+  awk -F \$'\\t' '{OFS=FS ; print "${parsed_basename}" \$0, "$setname" }' \
+    <( tail -n+2 results.sage.tsv) >> "${specfile.baseName}.tsv"
+
+  head -n1 results.sage.pin > "${specfile.baseName}.pin"
+  awk -F \$'\\t' '{OFS=FS ; print "${parsed_basename}" \$0}' <( tail -n+2 results.sage.pin) >> "${specfile.baseName}.pin"
+  """
+}
+
+
+process percolator {
   tag 'percolator'
   container params.__containers[tag][workflow.containerEngine]
 
   input:
-  tuple val(setname), path(mzids), path(tsvs)
+  tuple val(setname), path(pins)
 
   output:
-  tuple val(setname), path('perco.xml'), path(mzids), path(tsvs)
+  tuple val(setname), path('perco.xml')
 
   script:
   """
-  for mzid in ${mzids.collect() { "'$it'" }.join(' ')}; do echo \${mzid} >> metafile; done
-  msgf2pin -o percoin.xml -e trypsin -P "decoy_" metafile
-  percolator -j percoin.xml -X perco.xml -N 500000 --decoy-xml-output
+  head -n1 ${listify(pins)[0]} > percoin.tsv
+  cat ${listify(pins).collect { "<(tail -n+2 $it)" }.join(' ')} >> percoin.tsv
+  percolator -j percoin.tsv -X perco.xml -N 500000 --decoy-xml-output -Y --num-threads ${task.cpus}
   """
 }
 
@@ -237,7 +289,7 @@ process percolatorToPsms {
   container params.__containers[tag][workflow.containerEngine]
 
   input:
-  tuple val(setname), path('perco.xml'), path(mzids), path(tsvs), val(psmconf), val(pepconf)
+  tuple val(setname), path('perco.xml'), path(tsvs), val(psmconf), val(pepconf)
 
   output:
   tuple val(setname), path(outfile)
@@ -246,9 +298,9 @@ process percolatorToPsms {
   outfile = "${setname}_target.txt"
   """
   mkdir outtables
-  msstitch perco2psm --perco perco.xml -i ${tsvs.collect() { "'$it'" }.join(' ')} --mzids ${mzids.collect() { "'$it'" }.join(' ')} --filtpsm ${psmconf} --filtpep ${pepconf} -d outtables
+  msstitch perco2psm --perco perco.xml -i ${tsvs.collect() { "'$it'" }.join(' ')} --filtpsm ${psmconf} --filtpep ${pepconf} -d outtables
   msstitch concat -i outtables/* -o psms
-  msstitch split -i psms --splitcol \$(head -n1 psms | tr '\t' '\n' | grep -n ^TD\$ | cut -f 1 -d':')
+  msstitch split -i psms --splitcol TD
   mv target.tsv "${outfile}"
   """
 }
@@ -293,9 +345,9 @@ process createPSMTable {
   msstitch concat -i ${listify(psms).collect() {"$it"}.join(' ')} -o psms.txt
   # SQLite lookup needs copying to not modify the input file which would mess up a rerun with -resume
   cat lookup > $psmlookup
-  msstitch psmtable -i psms.txt --dbfile "$psmlookup" -o "${outpsms}" --addmiscleav --addbioset --isobaric
-  sed 's/\\#SpecFile/SpectraFile/' -i "${outpsms}"
-  ${is_pooled ? "msstitch split -i '${outpsms}' --splitcol bioset" : "msstitch split -i '${outpsms}' --splitcol 1"}
+  msstitch psmtable -i psms.txt --dbfile "$psmlookup" -o "${outpsms}" --addbioset --isobaric
+  ${is_pooled ? "msstitch split -i '${outpsms}' --splitcol bioset" : \
+    "msstitch split -i '${outpsms}' --splitcol \$(head -n1 psmtable.txt | tr '\\t' '\\n' | grep -wn '^filename\$' | cut -f 1 -d':')"}
   """
 }
 
@@ -429,8 +481,6 @@ with open('qc.html', 'w') as fp:
 workflow {
   // Validate and set inputs
   if (!params.isobaric) exit 1, "Isobaric type needs to be specified"
-  mods = file(params.mods)
-  if( !mods.exists() ) exit 1, "Modification file not found: ${params.mods}"
   tdb = file(params.tdb)
   if( !tdb.exists() ) exit 1, "Target fasta DB file not found: ${params.tdb}"
   
@@ -438,7 +488,7 @@ workflow {
   isobaric = params.isobaric == 'tmtpro' ? 'tmt16plex': params.isobaric
   plextype = isobaric.replaceFirst(/[0-9]+plex/, "")
   massshift = [tmt:0.0013, itraq:0.00125][plextype]
-  maxmiscleav = params.maxmissedcleavages > -1 ? params.maxmissedcleavages : 1000
+  maxmiscleav = params.maxmissedcleavages > -1 ? params.maxmissedcleavages : 20
   
   // set constant variables
   plexname_mass = [tmt10plex: ["TMT6plex",  229.162932],
@@ -448,7 +498,7 @@ workflow {
              itraq8plex: ["iTRAQ8plex", 304.205360],
              itraq4plex: ["iTRAQ4plex", 144.102063],
   ][isobaric]
-  modweight = Math.round(plexname_mass[1] * 1000) / 1000
+  modweight = Math.round(plexname_mass[1] * 100000) / 100000
   pooled = false
   if (params.input) {
     inputlines = file("${params.input}").readLines().collect { it.tokenize('\t') }
@@ -527,15 +577,18 @@ workflow {
   | combine(isofiles_sorted.toList())
   | quantLookup
   
-  mods = channel.fromPath(params.mods)
-  channel.fromPath(params.tdb)
-  | createTargetDecoyFasta
+  channel.from([params.minpeplen, params.maxpeplen, params.mincharge, params.maxcharge, maxmiscleav, params.maxvarmods, params.prectol, plexname_mass[1], file("$baseDir/assets/sage.json")])
+  | toList
+  | sagePrepare
   | combine(mzmls)
-  | combine(mods)
-  | map { it + [plexname_mass[0], plexname_mass[1]] }
-  | msgfPlus
-  | groupTuple()
+  | map { [it[0], it[1], it[2] == 'timstof' ? 'bruker' : 'thermo', it[3]] }
+  | combine(channel.fromPath(params.tdb) | createTargetDecoyFasta)
+  | sage
+  
+  sage.out.perco
+  | groupTuple
   | percolator
+  | join(sage.out.tsv | groupTuple)
   | map { it + [params.psmconflvl, params.pepconflvl] }
   | percolatorToPsms
   | toList()
@@ -545,7 +598,7 @@ workflow {
   | combine(quantLookup.out)
   | map { it + [pooled] }
   | createPSMTable
-  
+
   if (pooled) {
     createPSMTable.out
     | transpose()
