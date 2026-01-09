@@ -1,5 +1,10 @@
 # lehtiolab/nf-labelcheck: Changelog
 
+## v2.3 [2026-01-09]
+- Rewrite in DSL2
+- Use Sage instead of MSGF for speed
+- Enable using raw files via input file
+
 ## v2.2 [2024-09-25]
 - Handle empty channels
 - Single pipeline for both pooled/single file LC
