@@ -121,6 +121,21 @@ process isobaricQuant {
 }
 
 
+process correctFileNames {
+
+  input:
+  tuple path(infile), val(instrument), val(setname)
+  output:
+  tuple path(parsed_infile), val(instrument), val(setname)
+
+  script:
+  (is_stripped, parsed_infile, _) = stripchars_infile(infile)
+  """
+  ${is_stripped ? "ln -s ${infile} '${parsed_infile}'" : ''}
+  """
+}
+
+
 process createNewSpectraLookup {
 
   tag 'msstitch'
@@ -203,19 +218,15 @@ process sagePrepare {
 }
 
 
-def stripchars_infile(x, return_oldfile=false) {
+def stripchars_infile(x) {
   // FIXME %, ?, * fn turns a basename into a list because they are wildcards
   // Replace special characters since they cause trouble in percolator XML output downstream
   // e.g. & is not allowed in XML apparently (percolator doesnt encode it)
   // and LXML then crashes on reading it.
   // Also NF doesnt quote e.g. semicolons it seems.
-  def scriptinfile = "${x.baseName}.${x.extension}"
-  def parsed_file = scriptinfile.replaceAll('[&<>\'"]', '_')
-  if (return_oldfile) {
-    return [parsed_file != scriptinfile, parsed_file, scriptinfile]
-  } else {
-    return [parsed_file != scriptinfile, parsed_file]
-  }
+  def parsed_basename = x.baseName.replaceAll('[&<>\'"]', '_')
+  def outfile = "${parsed_basename}.mzML"
+  return [parsed_basename != x.baseName || x.extension != 'mzML', outfile, parsed_basename]
 }
 
 
@@ -234,13 +245,10 @@ process sage {
   // Bruker from msconvert has merged= frame= scanStart= scanEnd= as scannr
   // Bruker from tdf2mzml has index=.. as scannr
   remove_scan_index_str = instrumenttype == 'bruker'
-  (is_stripped, parsed_infile) = stripchars_infile(specfile)
-  (_, parsed_basename) = stripchars_infile(file(specfile.baseName))
   """
-  ${is_stripped ? "ln -s ${specfile} '${parsed_infile}'" : ''}
   export RAYON_NUM_THREADS=${task.cpus}
   export SAGE_LOG=trace
-  sage --disable-telemetry-i-dont-want-to-improve-sage --write-pin -f $db config.json $parsed_infile
+  sage --disable-telemetry-i-dont-want-to-improve-sage --write-pin -f $db config.json $specfile
   ${remove_scan_index_str ? "sed -i 's/index=//' results.sage.pin" : ''}
   ${remove_scan_index_str ? "sed -E -i 's/merged=([0-9]+) [SEa-z0-9\\ =]+/\\1/' results.sage.pin" : ''}
   ${remove_scan_index_str ? "sed -i 's/index=//' results.sage.tsv" : ''}
@@ -248,11 +256,11 @@ process sage {
 
   # Add set
   awk -F \$'\\t' '{OFS=FS ; print \$0, "Biological set" }' <( head -n1 results.sage.tsv) > "${specfile.baseName}.tsv"
-  awk -F \$'\\t' '{OFS=FS ; print "${parsed_basename}" \$0, "$setname" }' \
+  awk -F \$'\\t' '{OFS=FS ; print "${specfile.baseName}" \$0, "$setname" }' \
     <( tail -n+2 results.sage.tsv) >> "${specfile.baseName}.tsv"
 
   head -n1 results.sage.pin > "${specfile.baseName}.pin"
-  awk -F \$'\\t' '{OFS=FS ; print "${parsed_basename}" \$0}' <( tail -n+2 results.sage.pin) >> "${specfile.baseName}.pin"
+  awk -F \$'\\t' '{OFS=FS ; print "${specfile.baseName}" \$0}' <( tail -n+2 results.sage.pin) >> "${specfile.baseName}.pin"
   """
 }
 
@@ -534,7 +542,7 @@ workflow {
   
   } else if (!pooled) {
     inputch
-      .map { ["${it[0].baseName}.${it[0].extension}", it[3], 'NA'] }
+      .map { ["${it[0].baseName}.mzML", it[3], 'NA'] }
       .set { channel_sample }
   
   } else {
@@ -548,9 +556,11 @@ workflow {
     raw: filetype == 'raw'
     mzml: filetype == 'mzml'
   } | set { files_classified }
+  
   files_classified.raw
   | runThermoFileparser
   | concat(files_classified.mzml)
+  | correctFileNames
   | set { mzmls }
 
   mzmls
