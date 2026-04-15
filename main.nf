@@ -87,7 +87,7 @@ log.info "\033[2m----------------------------------------------------\033[0m"
 process runThermoFileparser {
 
   tag 'thermorawfileparser'
-  container params.__containers[tag][workflow.containerEngine]
+  container { params.__containers[task.tag][workflow.containerEngine] }
 
   input:
   tuple path(x), val(inst), val(setname)
@@ -106,7 +106,7 @@ process runThermoFileparser {
 process isobaricQuant {
 
   tag 'openms'
-  container params.__containers[tag][workflow.containerEngine]
+  container { params.__containers[task.tag][workflow.containerEngine] }
 
   input:
   tuple path(infile), val(instrument), val(setname), val(isobaric), val(activationtype), val(massshift)
@@ -139,7 +139,7 @@ process correctFileNames {
 process createNewSpectraLookup {
 
   tag 'msstitch'
-  container params.__containers[tag][workflow.containerEngine]
+  container { params.__containers[task.tag][workflow.containerEngine] }
 
   input:
   tuple path(mzmlfiles), val(setnames)
@@ -157,7 +157,7 @@ process createNewSpectraLookup {
 process quantLookup {
 
   tag 'msstitch'
-  container params.__containers[tag][workflow.containerEngine]
+  container { params.__containers[task.tag][workflow.containerEngine] }
 
   input:
   tuple path(lookup), path(isofns)
@@ -177,7 +177,7 @@ process quantLookup {
 process createTargetDecoyFasta {
 
   tag 'msstitch'
-  container params.__containers[tag][workflow.containerEngine]
+  container { params.__containers[task.tag][workflow.containerEngine] }
  
   input:
   path(tdb)
@@ -195,7 +195,7 @@ process createTargetDecoyFasta {
 
 process sagePrepare {
   tag 'jq'
-  container params.__containers[tag][workflow.containerEngine]
+  container { params.__containers[task.tag][workflow.containerEngine] }
  
   input:
   tuple val(minlen), val(maxlen), val(mincharge), val(maxcharge), val(maxmiscleav), val(maxvarmods), val(prectol), val(plexmass), path('sage.json')
@@ -232,7 +232,7 @@ def stripchars_infile(x) {
 
 process sage {
   tag 'sage'
-  container params.__containers[tag][workflow.containerEngine]
+  container { params.__containers[task.tag][workflow.containerEngine] }
 
   input:
   tuple path('config.json'), path(specfile), val(instrumenttype), val(setname), path(db)
@@ -267,7 +267,7 @@ process sage {
 
 process percolator {
   tag 'percolator'
-  container params.__containers[tag][workflow.containerEngine]
+  container { params.__containers[task.tag][workflow.containerEngine] }
 
   input:
   tuple val(setname), path(pins)
@@ -286,7 +286,7 @@ process percolator {
 
 process percolatorToPsms {
   tag 'msstitch'
-  container params.__containers[tag][workflow.containerEngine]
+  container { params.__containers[task.tag][workflow.containerEngine] }
 
   input:
   tuple val(setname), path('perco.xml'), path(tsvs), val(psmconf), val(pepconf)
@@ -324,19 +324,14 @@ def listify(it) {
 process createPSMTable {
 
   tag 'msstitch'
-  container params.__containers[tag][workflow.containerEngine]
-
-  publishDir "${params.outdir}", mode: 'copy',
-    saveAs: {filename ->
-        if (filename == outpsms) filename
-        else null
-    }
+  container { params.__containers[task.tag][workflow.containerEngine] }
 
   input:
   tuple val(setnames), path(psms), path('lookup'), val(is_pooled)
 
   output:
-  tuple val(setnames), path('*.tsv')
+  tuple val(setnames), path('*.tsv'), emit: splittables
+  path(outpsms), emit: outpsms
   
   script:
   psmlookup = "psmlookup.sql"
@@ -354,7 +349,7 @@ process createPSMTable {
 process psm2Peptides {
 
   tag 'msstitch'
-  container params.__containers[tag][workflow.containerEngine]
+  container { params.__containers[task.tag][workflow.containerEngine] }
 
   input:
   tuple val(set_or_fn), file(psms), val(channels), val(samples), val(maxmiscleav), val(modweight)
@@ -375,9 +370,7 @@ ${params.sampletable ? "\"${channels.join(',')}\" \"${samples.join(',')}\"" : ''
 process pooledReportLabelCheck {
 
   tag 'ddamsproteomics'
-  container params.__containers[tag][workflow.containerEngine]
-
-  publishDir "${params.outdir}", mode: 'copy'
+  container { params.__containers[task.tag][workflow.containerEngine] }
 
   input:
   tuple val(ordered_sets), val(ordered_ch), path('means????'), val(maxmiscleav)
@@ -415,8 +408,7 @@ with open('qc.html', 'w') as fp:
 process nonPooledReportLabelCheck {
 
   tag 'ddamsproteomics'
-  container params.__containers[tag][workflow.containerEngine]
-  publishDir "${params.outdir}", mode: 'copy'
+  container { params.__containers[task.tag][workflow.containerEngine] }
 
   input:
 // name stats files after mzml fns for easy access FIXME
@@ -559,7 +551,7 @@ workflow {
   
   files_classified.raw
   | runThermoFileparser
-  | concat(files_classified.mzml)
+  | mix(files_classified.mzml)
   | correctFileNames
   | set { mzmls }
 
@@ -602,12 +594,12 @@ workflow {
   | createPSMTable
 
   if (pooled) {
-    createPSMTable.out
+    createPSMTable.out.splittables
     | transpose()
     | set { pre_peptides }
   
   } else {
-    createPSMTable.out
+    createPSMTable.out.splittables
     | map { it[1] } 
     | flatten()
     | map { [it.baseName, it] }
@@ -640,7 +632,13 @@ workflow {
   
   psm_values.nonpool
   | nonPooledReportLabelCheck
-  | concat(pooledReportLabelCheck.out)
-  | flatten
-  | subscribe { it.copyTo("${params.outdir}/${it.baseName}.${it.extension}") }
+  | mix(pooledReportLabelCheck.out)
+  | set { output_ch }
+
+  publish:
+  wf_output = output_ch
+}
+
+output {
+  wf_output {}
 }
