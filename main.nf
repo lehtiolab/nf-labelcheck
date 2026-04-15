@@ -41,48 +41,6 @@ def helpMessage() {
     """.stripIndent()
 }
 
-/*
- * SET UP CONFIGURATION VARIABLES
- */
-
-// Show help message
-if (params.help){
-    helpMessage()
-    exit 0
-}
-
-
-// Has the run name been specified by the user?
-//  this has the bonus effect of catching both -name and --name
-custom_runName = params.name
-if( !(workflow.runName ==~ /[a-z]+_[a-z]+/) ){
-  custom_runName = workflow.runName
-}
-
-
-
-// Header log info
-def summary = [:]
-if(workflow.revision) summary['Pipeline Release'] = workflow.revision
-summary['Run Name']         = custom_runName ?: workflow.runName
-
-summary['Input definition'] = params.input
-summary['Sample table'] = params.sampletable
-summary['Target DB']    = params.tdb
-summary['Isobaric tags'] = params.isobaric
-summary['Isobaric activation'] = params.activation
-
-if(workflow.containerEngine) summary['Container'] = "$workflow.containerEngine - $workflow.container"
-summary['Output dir']       = params.outdir
-summary['Launch dir']       = workflow.launchDir
-summary['Working dir']      = workflow.workDir
-summary['Script dir']       = workflow.projectDir
-summary['User']             = workflow.userName
-summary['Config Profile'] = workflow.profile
-log.info summary.collect { k,v -> "${k.padRight(18)}: $v" }.join("\n")
-log.info "\033[2m----------------------------------------------------\033[0m"
-
-
 
 process runThermoFileparser {
 
@@ -129,7 +87,7 @@ process correctFileNames {
   tuple path(parsed_infile), val(instrument), val(setname)
 
   script:
-  (is_stripped, parsed_infile, _) = stripchars_infile(infile)
+  (is_stripped, parsed_infile, _tmp) = stripchars_infile(infile)
   """
   ${is_stripped ? "ln -s ${infile} '${parsed_infile}'" : ''}
   """
@@ -373,7 +331,7 @@ process pooledReportLabelCheck {
   container { params.__containers[task.tag][workflow.containerEngine] }
 
   input:
-  tuple val(ordered_sets), val(ordered_ch), path('means????'), val(maxmiscleav)
+  tuple val(ordered_sets), val(ordered_ch), path('means????'), val(maxmiscleav), val(name)
 
   output:
   path('qc.html')
@@ -400,7 +358,7 @@ data = {x['filename']: x for x in data}
 with open("${report}") as fp: 
     main = Template(fp.read())
 with open('qc.html', 'w') as fp:
-    fp.write(main.render(reportname='$custom_runName', filenames=ordered_sets, labeldata=data, maxmiscleav=maxmiss + 1))
+    fp.write(main.render(reportname='$name', filenames=ordered_sets, labeldata=data, maxmiscleav=maxmiss + 1))
 """
 }
 
@@ -412,7 +370,7 @@ process nonPooledReportLabelCheck {
 
   input:
 // name stats files after mzml fns for easy access FIXME
-  tuple val(ordered_fns), val(ordered_ch), path('means????'), val(maxmiscleav)
+  tuple val(ordered_fns), val(ordered_ch), path('means????'), val(maxmiscleav), val(name)
 
   output:
   path('qc.html')
@@ -464,13 +422,49 @@ maxmiss = int(${maxmiscleav})
 with open("${report}") as fp: 
     main = Template(fp.read())
 with open('qc.html', 'w') as fp:
-    fp.write(main.render(reportname='$custom_runName', filenames=ordered_fns, channels=ordered_chs,
+    fp.write(main.render(reportname='$name', filenames=ordered_fns, channels=ordered_chs,
         labeldata=labeldata, isomeans=dict(isomeans), miscleav=miscleav, maxmiscleav=maxmiss))
 """
 }
 
 
 workflow {
+  main:
+
+  // Show help message
+  if (params.help){
+      helpMessage()
+      exit 0
+  }
+  
+  // Has the run name been specified by the user?
+  //  this has the bonus effect of catching both -name and --name
+  def custom_runName = params.name
+  if( !(workflow.runName ==~ /[a-z]+_[a-z]+/) ){
+    custom_runName = workflow.runName
+  }
+  
+  // Header log info
+  def summary = [:]
+  if(workflow.revision) summary['Pipeline Release'] = workflow.revision
+  summary['Run Name']         = custom_runName ?: workflow.runName
+  
+  summary['Input definition'] = params.input
+  summary['Sample table'] = params.sampletable
+  summary['Target DB']    = params.tdb
+  summary['Isobaric tags'] = params.isobaric
+  summary['Isobaric activation'] = params.activation
+  
+  if(workflow.containerEngine) summary['Container'] = "$workflow.containerEngine - $workflow.container"
+  summary['Output dir']       = params.outdir
+  summary['Launch dir']       = workflow.launchDir
+  summary['Working dir']      = workflow.workDir
+  summary['Script dir']       = workflow.projectDir
+  summary['User']             = workflow.userName
+  summary['Config Profile'] = workflow.profile
+  log.info summary.collect { k,v -> "${k.padRight(18)}: $v" }.join("\n")
+  log.info "\033[2m----------------------------------------------------\033[0m"
+
   // Validate and set inputs
   if (!params.isobaric) exit 1, "Isobaric type needs to be specified"
   tdb = file(params.tdb)
@@ -628,9 +622,11 @@ workflow {
   } | set { psm_values }
   
   psm_values.pool
+  | map { it + [custom_runName] }
   | pooledReportLabelCheck
   
   psm_values.nonpool
+  | map { it + [custom_runName] }
   | nonPooledReportLabelCheck
   | mix(pooledReportLabelCheck.out)
   | set { output_ch }
